@@ -11,10 +11,12 @@ export interface ImageExportOptions {
   formats: string[];
   directory: string;
   customDirectories: { [scale: string]: string };
+  pathPrefix?: string;
+  defaultScale?: string;
 }
 
 export interface ExportedImageInfo {
-  [nodeName: string]: {
+  [nodeId: string]: {
     [scale: string]: {
       [format: string]: string;
     };
@@ -52,10 +54,10 @@ export class ImageExporter {
     const imageNodes: ImageNode[] = [];
     
     const findImages = (node: any) => {
-      // Check if node has image fills
+      // Check if node has image fills - be more inclusive
       if (node.fills && Array.isArray(node.fills)) {
         const hasImageFill = node.fills.some((fill: any) => 
-          fill.type === 'IMAGE' && fill.imageRef
+          fill.type === 'IMAGE' && fill.visible !== false
         );
         if (hasImageFill) {
           imageNodes.push({
@@ -63,16 +65,33 @@ export class ImageExporter {
             name: node.name || `image_${node.id}`,
             type: node.type,
           });
+          Logger.debug(`Found image node: ${node.name} (${node.type}) with ID: ${node.id}`);
         }
       }
 
-      // Check for vector/icon nodes that should be exported as SVG
+      // Include vector nodes that might have exportable content
       if (node.type === 'VECTOR' || node.type === 'BOOLEAN_OPERATION') {
         imageNodes.push({
           id: node.id,
           name: node.name || `vector_${node.id}`,
           type: node.type,
         });
+        Logger.debug(`Found vector node: ${node.name} (${node.type}) with ID: ${node.id}`);
+      }
+
+      // Also check for any node that might generate images in Flutter
+      if (node.type === 'FRAME' || node.type === 'COMPONENT' || node.type === 'INSTANCE') {
+        if (node.fills && Array.isArray(node.fills)) {
+          const hasImageFill = node.fills.some((fill: any) => fill.type === 'IMAGE');
+          if (hasImageFill) {
+            imageNodes.push({
+              id: node.id,
+              name: node.name || `frame_image_${node.id}`,
+              type: node.type,
+            });
+            Logger.debug(`Found frame with image: ${node.name} (${node.type}) with ID: ${node.id}`);
+          }
+        }
       }
 
       // Recursively check children
@@ -82,6 +101,7 @@ export class ImageExporter {
     };
 
     nodes.forEach(findImages);
+    Logger.debug(`Total image nodes found: ${imageNodes.length}`);
     return imageNodes;
   }
 
@@ -108,18 +128,20 @@ export class ImageExporter {
     // Create base directory
     await this.ensureDirectory(exportOptions.directory);
 
-    for (const imageNode of imageNodes) {
-      Logger.debug(`Exporting images for node: ${imageNode.name}`);
+    // Process images with better error handling and limits
+    for (let i = 0; i < Math.min(imageNodes.length, 10); i++) {
+      const imageNode = imageNodes[i];
+      Logger.debug(`Exporting images for node ${i + 1}/${imageNodes.length}: ${imageNode.name}`);
       
       const sanitizedName = this.sanitizeFilename(imageNode.name);
-      exportedImages[sanitizedName] = {};
+      exportedImages[imageNode.id] = {};
 
       for (const scale of exportOptions.scales) {
         const scaleNumber = this.parseScale(scale);
         const scaleDir = path.join(exportOptions.directory, exportOptions.customDirectories[scale] || `${scale}/`);
         
         await this.ensureDirectory(scaleDir);
-        exportedImages[sanitizedName][scale] = {};
+        exportedImages[imageNode.id][scale] = {};
 
         for (const format of exportOptions.formats) {
           try {
@@ -135,13 +157,18 @@ export class ImageExporter {
             
             // Store relative path from images directory
             const relativePath = path.relative(exportOptions.directory, filePath);
-            exportedImages[sanitizedName][scale][format] = relativePath;
+            exportedImages[imageNode.id][scale][format] = relativePath;
             
           } catch (error) {
             Logger.warn(`Failed to export ${sanitizedName} at ${scale} in ${format}:`, error);
+            // Continue with other exports even if one fails
           }
         }
       }
+    }
+
+    if (imageNodes.length > 10) {
+      Logger.warn(`Limited image export to first 10 nodes (found ${imageNodes.length} total). Use more specific node selection for full export.`);
     }
 
     return exportedImages;
@@ -162,20 +189,26 @@ export class ImageExporter {
     // Determine export format for Figma API
     const figmaFormat = format === 'webp' ? 'png' : format;
     
-    // Get image URL from Figma
-    const imageResponse = await this.figmaClient.getImageUrls(
-      fileKey,
-      [imageNode.id],
-      { format: figmaFormat, scale }
-    );
+    // Get image URL from Figma with timeout
+    const imageResponse = await Promise.race([
+      this.figmaClient.getImageUrls(fileKey, [imageNode.id], { format: figmaFormat, scale }),
+      new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('Image URL fetch timeout')), 10000)
+      )
+    ]);
 
     const imageUrl = imageResponse.images[imageNode.id];
     if (!imageUrl) {
       throw new AppError(`No image URL returned for node ${imageNode.id}`, 500);
     }
 
-    // Download image buffer
-    const imageBuffer = await this.figmaClient.downloadImage(imageUrl);
+    // Download image buffer with timeout
+    const imageBuffer = await Promise.race([
+      this.figmaClient.downloadImage(imageUrl),
+      new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('Image download timeout')), 15000)
+      )
+    ]);
     
     // Generate filename
     const scaleSuffix = scaleString !== '1x' ? `_${scaleString}` : '';
@@ -184,7 +217,13 @@ export class ImageExporter {
 
     // Convert PNG to WebP if requested
     if (format === 'webp' && figmaFormat === 'png') {
-      finalBuffer = await sharp(imageBuffer).webp({ quality: 90 }).toBuffer();
+      try {
+        finalBuffer = await sharp(imageBuffer).webp({ quality: 90 }).toBuffer();
+      } catch (error) {
+        Logger.warn(`WebP conversion failed for ${sanitizedName}, using PNG:`, error);
+        filename = `${sanitizedName}${scaleSuffix}.png`;
+        finalBuffer = imageBuffer;
+      }
     }
 
     // Save file

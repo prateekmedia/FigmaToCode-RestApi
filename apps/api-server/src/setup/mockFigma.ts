@@ -10,7 +10,7 @@
     getAsync: () => Promise.resolve({}),
     setAsync: () => Promise.resolve(),
   },
-  getSelectionColors: () => [], // Return empty colors array for API mode
+  getSelectionColors: () => ({ paints: [] }), // Return empty colors array for API mode
   getLocalVariables: () => [], // Return empty variables array for API mode
 };
 

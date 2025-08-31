@@ -15,6 +15,8 @@ export interface ConvertRequest {
     formats?: string[];
     directory?: string;
     customDirectories?: { [scale: string]: string };
+    pathPrefix?: string;
+    defaultScale?: string;
   };
 }
 

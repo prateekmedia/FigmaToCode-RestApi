@@ -16,7 +16,6 @@ import {
 import { PluginSettings } from "types";
 import { addWarning } from "../common/commonConversionWarnings";
 import { getVisibleNodes } from "../common/nodeVisibility";
-import { retrieveTopFill } from "../common/retrieveFill";
 
 let localSettings: PluginSettings;
 let previousExecutionCache: string[];
@@ -98,50 +97,75 @@ const flutterWidgetGenerator = (
   const visibleSceneNode = getVisibleNodes(sceneNode);
 
   visibleSceneNode.forEach((node) => {
+    let widgetResult = "";
+    
     switch (node.type) {
       case "RECTANGLE":
       case "ELLIPSE":
       case "STAR":
       case "POLYGON":
       case "LINE":
-        comp.push(flutterContainer(node, "", stackParentContext));
+        // Only create container if it has meaningful styling
+        if (hasVisualStyling(node)) {
+          widgetResult = flutterContainer(node, "", stackParentContext);
+        }
         break;
       case "GROUP":
-        comp.push(flutterGroup(node, stackParentContext));
+        widgetResult = flutterGroup(node, stackParentContext);
         break;
       case "FRAME":
       case "INSTANCE":
       case "COMPONENT":
       case "COMPONENT_SET":
-        comp.push(flutterFrame(node, stackParentContext));
+        widgetResult = flutterFrame(node, stackParentContext);
         break;
       case "SECTION":
-        comp.push(flutterContainer(node, "", stackParentContext));
+        // Only create container if it has meaningful styling
+        if (hasVisualStyling(node)) {
+          widgetResult = flutterContainer(node, "", stackParentContext);
+        }
         break;
       case "TEXT":
-        comp.push(flutterText(node, stackParentContext));
+        widgetResult = flutterText(node, stackParentContext);
         break;
       case "VECTOR":
         addWarning("VectorNodes are not supported in Flutter");
         break;
       case "SLICE":
+        break;
+      case "BOOLEAN_OPERATION":
+        addWarning("BOOLEAN_OPERATION node is not supported");
+        break;
       default:
-      // do nothing
+        break;
+    }
+    
+    // Only add widget to comp if it's not empty
+    if (widgetResult && widgetResult.trim() !== "") {
+      comp.push(widgetResult);
     }
   });
 
-  return comp.join(",\n");
+  // Filter out empty widgets before joining
+  const meaningfulWidgets = comp.filter(widget => widget && widget.trim() !== "");
+  return meaningfulWidgets.join(",\n");
 };
 
 const flutterGroup = (node: GroupNode, stackParentContext?: { absoluteBoundingBox: any, name: string }): string => {
   const widget = flutterWidgetGenerator(node.children, stackParentContext);
-  return flutterContainer(
-    node,
-    generateWidgetCode("Stack", {
-      children: widget ? [widget] : [],
-    }),
-    stackParentContext
-  );
+  
+  // Don't create Stack if there are no children
+  if (!widget || widget.trim() === "") {
+    return hasVisualStyling(node) ? flutterContainer(node, "", stackParentContext) : "";
+  }
+  
+  const stackWidget = generateWidgetCode("Stack", {
+    children: [widget],
+  });
+  
+  // Only wrap in Container if styling is needed
+  const needsContainerStyling = hasVisualStyling(node);
+  return needsContainerStyling ? flutterContainer(node, stackWidget, stackParentContext) : stackWidget;
 };
 
 const flutterContainer = (node: SceneNode, child: string, stackParentContext?: { absoluteBoundingBox: any, name: string }): string => {
@@ -219,25 +243,13 @@ const flutterFrame = (
       absoluteBoundingBox: (node as any).absoluteBoundingBox,
       name: node.name 
     };
-    console.log(`Frame "${node.name}" will generate Stack - passing context to children`);
   }
   
   const children = flutterWidgetGenerator(node.children, childContext);
 
-  // Debug only specific frames that should use Stack
-  if (node.name.includes("Frame 1412769182") || node.name.includes("header") || (node.children && node.children.some((child: any) => child.name === "Label"))) {
-    console.log(`LAYOUT MODE DEBUG for "${node.name}":`, {
-      layoutMode: node.layoutMode,
-      inferredAutoLayout: !!node.inferredAutoLayout,
-      hasAbsoluteChildren,
-      isRootFrame,
-      childNames: node.children?.map((child: any) => child.name)
-    });
-  }
 
-  // Check if layoutMode is AUTO - prefer Stack for absolute positioning
-  if (node.layoutMode === "AUTO") {
-    console.log(`Using Stack for AUTO layoutMode: "${node.name}"`);
+  // Use Stack for absolute positioned children or when no layout mode
+  if (hasAbsoluteChildren || isRootFrame || node.layoutMode === "NONE") {
     return flutterContainer(
       node,
       generateWidgetCode("Stack", {
@@ -264,14 +276,25 @@ const flutterFrame = (
   }
 
   // Use Stack only when necessary (absolute positioned children, root frames, or no layout)
-  if (hasAbsoluteChildren || isRootFrame || node.layoutMode === "NONE") {
-    return flutterContainer(
-      node,
-      generateWidgetCode("Stack", {
-        children: children !== "" ? [children] : [],
-      }),
-      stackParentContext
-    );
+  if (hasAbsoluteChildren || isRootFrame || !node.layoutMode || (node.layoutMode as any) === "NONE") {
+    // Don't create Stack if there are no meaningful children
+    if (children === "" || children.trim() === "") {
+      // Return empty widget or minimal container only if styling is needed
+      return hasVisualStyling(node) ? flutterContainer(node, "", stackParentContext) : "";
+    }
+    
+    const stackWidget = generateWidgetCode("Stack", {
+      children: [children],
+    });
+    
+    // Check if Stack would be empty (children array becomes empty after filtering)
+    if (stackWidget.includes("children: [],") || stackWidget === "Stack()") {
+      return hasVisualStyling(node) ? flutterContainer(node, "", stackParentContext) : "";
+    }
+    
+    // Only wrap in Container if styling is needed
+    const needsContainerStyling = hasVisualStyling(node);
+    return needsContainerStyling ? flutterContainer(node, stackWidget, stackParentContext) : stackWidget;
   }
 
   if (node.isAsset) {
@@ -279,13 +302,22 @@ const flutterFrame = (
   }
 
   // Default to Stack for frames without any layout info
-  return flutterContainer(
-    node,
-    generateWidgetCode("Stack", {
-      children: children !== "" ? [children] : [],
-    }),
-    stackParentContext
-  );
+  if (children === "" || children.trim() === "") {
+    return hasVisualStyling(node) ? flutterContainer(node, "", stackParentContext) : "";
+  }
+  
+  const defaultStackWidget = generateWidgetCode("Stack", {
+    children: [children],
+  });
+  
+  // Check if Stack would be empty
+  if (defaultStackWidget.includes("children: [],") || defaultStackWidget === "Stack()") {
+    return hasVisualStyling(node) ? flutterContainer(node, "", stackParentContext) : "";
+  }
+  
+  // Only wrap in Container if styling is needed
+  const needsContainerStyling = hasVisualStyling(node);
+  return needsContainerStyling ? flutterContainer(node, defaultStackWidget, stackParentContext) : defaultStackWidget;
 };
 
 const makeRowColumnWrap = (
@@ -328,32 +360,40 @@ const makeRowColumnWrap = (
 };
 
 const hasVisualStyling = (node: SceneNode): boolean => {
-  // Check if node has visual properties that require Container wrapper
+  // More selective check - only create Container when visual styling is actually needed
   
-  // Has background fills or decorations
+  // Check for meaningful background fills (not transparent/invisible)
   if ("fills" in node && node.fills && Array.isArray(node.fills) && node.fills.length > 0) {
     const topFill = retrieveTopFill(node.fills as any);
     if (topFill && topFill.visible !== false) {
+      // Skip transparent or very low opacity fills
+      if (topFill.type === "SOLID" && topFill.color && topFill.color.a < 0.01) {
+        // Skip nearly transparent fills
+      } else {
+        return true;
+      }
+    }
+  }
+  
+  // Has meaningful border/stroke (not minimal)
+  if ("strokeWeight" in node && node.strokeWeight && Number(node.strokeWeight) > 0.5) {
+    return true;
+  }
+  
+  // Has significant padding (not minimal)
+  if ("paddingLeft" in node) {
+    const totalPadding = (Number(node.paddingLeft) || 0) + (Number(node.paddingRight) || 0) + (Number(node.paddingTop) || 0) + (Number(node.paddingBottom) || 0);
+    if (totalPadding > 2) { // Only meaningful padding
       return true;
     }
   }
   
-  // Has border/stroke
-  if ("strokeWeight" in node && node.strokeWeight && node.strokeWeight > 0) {
+  // Has meaningful corner radius
+  if ("cornerRadius" in node && node.cornerRadius && Number(node.cornerRadius) > 2) {
     return true;
   }
   
-  // Has padding
-  if ("paddingLeft" in node && (node.paddingLeft || node.paddingRight || node.paddingTop || node.paddingBottom)) {
-    return true;
-  }
-  
-  // Has corner radius
-  if ("cornerRadius" in node && node.cornerRadius && node.cornerRadius > 0) {
-    return true;
-  }
-  
-  // Has clipping
+  // Has important clipping
   if ("clipsContent" in node && node.clipsContent === true) {
     return true;
   }
@@ -363,13 +403,17 @@ const hasVisualStyling = (node: SceneNode): boolean => {
     return true;
   }
   
-  // Has shadow effects
+  // Has visible shadow effects
   if ("effects" in node && node.effects && Array.isArray(node.effects) && node.effects.length > 0) {
-    const hasVisibleEffects = node.effects.some(effect => effect.visible !== false);
+    const hasVisibleEffects = node.effects.some(effect => 
+      effect.visible !== false && 
+      (effect.type === "DROP_SHADOW" || effect.type === "INNER_SHADOW" || effect.type === "LAYER_BLUR")
+    );
     if (hasVisibleEffects) {
       return true;
     }
   }
+  
   
   return false;
 };

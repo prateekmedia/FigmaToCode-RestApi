@@ -132,7 +132,15 @@ convertRoute.post('/', asyncHandler(async (req, res) => {
 
   // Generate code using existing backend
   Logger.info('Generating code...');
-  const result = await CodeGenerator.generateCode(restApiNodes, settings as PluginSettings, exportedImages);
+  const result = await CodeGenerator.generateCode(
+    restApiNodes, 
+    settings as PluginSettings, 
+    exportedImages,
+    exportImagesOptions ? {
+      pathPrefix: exportImagesOptions.pathPrefix,
+      defaultScale: exportImagesOptions.defaultScale
+    } : undefined
+  );
 
   Logger.info('Code generation completed');
 

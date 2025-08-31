@@ -105,8 +105,13 @@ export const flutterDecorationImage = (node: SceneNode, fill: ImagePaint) => {
     imageHeight = node.height;
   }
   
+  // Check for local image path from API server
+  const imageSource = (fill as any).localImagePath 
+    ? `AssetImage("${(fill as any).localImagePath}")`
+    : `NetworkImage("${getPlaceholderImage(imageWidth, imageHeight)}")`;
+
   return generateWidgetCode("DecorationImage", {
-    image: `NetworkImage("${getPlaceholderImage(imageWidth, imageHeight)}")`,
+    image: imageSource,
     fit: fitToBoxFit(fill),
   });
 };

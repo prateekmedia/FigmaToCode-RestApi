@@ -31,7 +31,8 @@ export class CodeGenerator {
   static async generateCode(
     restApiNodes: any[], 
     settings: PluginSettings,
-    exportedImages?: ExportedImageInfo
+    exportedImages?: ExportedImageInfo,
+    imageOptions?: { pathPrefix?: string; defaultScale?: string }
   ): Promise<CodeGenerationResult> {
     // Reset performance counters and warnings like the plugin does
     resetPerformanceCounters();
@@ -47,7 +48,7 @@ export class CodeGenerator {
     // we directly use the REST API node data which is already in JSON format
     // We just need to process it to match the internal format
     Logger.debug('Processing REST API nodes...');
-    const convertedSelection = await this.processRestApiNodes(restApiNodes, settings, exportedImages);
+    const convertedSelection = await this.processRestApiNodes(restApiNodes, settings, exportedImages, imageOptions);
     
     if (convertedSelection.length === 0) {
       throw new AppError('No nodes could be converted', 400);
@@ -64,10 +65,10 @@ export class CodeGenerator {
     const htmlPreviewResult = await generateHTMLPreview(convertedSelection, settings);
     const htmlPreview = typeof htmlPreviewResult === 'string' ? htmlPreviewResult : htmlPreviewResult.content;
 
-    // Extract colors and gradients
-    Logger.debug('Extracting colors and gradients...');
-    const colors = await this.extractColors(convertedSelection);
-    const gradients = await this.extractGradients(convertedSelection);
+    // Skip color extraction in API mode for now (requires plugin environment)
+    Logger.debug('Skipping color extraction in API mode...');
+    const colors: any[] = [];
+    const gradients: any[] = [];
 
     // Get any warnings that were generated
     const generatedWarnings: string[] = Array.from(warnings);
@@ -87,14 +88,14 @@ export class CodeGenerator {
    * Processes REST API nodes to match the format the backend expects
    * This bypasses nodesToJSON since we already have JSON data from the REST API
    */
-  private static async processRestApiNodes(restApiNodes: any[], settings: PluginSettings, exportedImages?: ExportedImageInfo): Promise<any[]> {
+  private static async processRestApiNodes(restApiNodes: any[], settings: PluginSettings, exportedImages?: ExportedImageInfo, imageOptions?: { pathPrefix?: string; defaultScale?: string }): Promise<any[]> {
     // First pass: normalize coordinates to 0-based system
     const normalizedNodes = this.normalizeCoordinates(restApiNodes);
     
     const processedNodes = [];
     for (const node of normalizedNodes) {
       // Process the node to match what nodesToJSON would output
-      const processedNode = await this.processRestApiNode(node, settings, exportedImages);
+      const processedNode = await this.processRestApiNode(node, settings, exportedImages, imageOptions);
       if (processedNode) {
         processedNodes.push(processedNode);
       }
@@ -163,7 +164,7 @@ export class CodeGenerator {
   /**
    * Processes a single REST API node to match backend expectations
    */
-  private static async processRestApiNode(node: any, settings: PluginSettings, exportedImages?: ExportedImageInfo): Promise<any> {
+  private static async processRestApiNode(node: any, settings: PluginSettings, exportedImages?: ExportedImageInfo, imageOptions?: { pathPrefix?: string; defaultScale?: string }): Promise<any> {
     // Start with the node as-is since REST API already provides JSON
     const processedNode = {
       ...node,
@@ -189,7 +190,7 @@ export class CodeGenerator {
     if (node.children && Array.isArray(node.children)) {
       processedNode.children = [];
       for (const child of node.children) {
-        const processedChild = await this.processRestApiNode(child, settings, exportedImages);
+        const processedChild = await this.processRestApiNode(child, settings, exportedImages, imageOptions);
         if (processedChild) {
           processedNode.children.push(processedChild);
         }
@@ -198,7 +199,8 @@ export class CodeGenerator {
 
     // Replace image placeholders with actual paths if available
     if (exportedImages) {
-      this.updateImagePaths(processedNode, exportedImages);
+      Logger.debug(`Updating image paths for node: ${processedNode.name}`);
+      this.updateImagePaths(processedNode, exportedImages, imageOptions);
     }
 
     // Map REST API layout properties to expected format for Flutter generation
@@ -253,21 +255,39 @@ export class CodeGenerator {
   /**
    * Updates image paths in processed nodes to use actual downloaded images
    */
-  private static updateImagePaths(node: any, exportedImages: ExportedImageInfo): void {
-    const sanitizedName = this.sanitizeNodeName(node.name || '');
+  private static updateImagePaths(node: any, exportedImages: ExportedImageInfo, imageOptions?: { pathPrefix?: string; defaultScale?: string }): void {
+    Logger.debug(`Checking image paths for node "${node.name}" (ID: ${node.id})`, {
+      availableImages: Object.keys(exportedImages),
+      nodeType: node.type,
+      hasFills: !!(node.fills && node.fills.length > 0)
+    });
     
-    // Check if this node has exported images
-    if (exportedImages[sanitizedName]) {
-      const imageData = exportedImages[sanitizedName];
+    // Check if this node has exported images using node ID
+    if (exportedImages[node.id]) {
+      const imageData = exportedImages[node.id];
+      Logger.debug(`Found image data for ${node.id}:`, imageData);
       
-      // For Flutter, we typically want 1x image path, but could be configurable
-      if (imageData['1x'] && imageData['1x']['png']) {
-        const imagePath = imageData['1x']['png'];
+      // Use configured scale or default to first available scale
+      const defaultScale = imageOptions?.defaultScale || Object.keys(imageData)[0] || '1x';
+      const scaleData = imageData[defaultScale];
+      
+      if (scaleData && Object.keys(scaleData).length > 0) {
+        const format = Object.keys(scaleData)[0]; // Use first available format
+        let imagePath = scaleData[format];
+        
+        // Add path prefix if configured
+        if (imageOptions?.pathPrefix) {
+          imagePath = imageOptions.pathPrefix + imagePath;
+        }
+        
+        Logger.debug(`Setting image path: ${imagePath} for node: ${node.name} (scale: ${defaultScale}, format: ${format})`);
         
         // Update fills if they contain image references
         if (node.fills && Array.isArray(node.fills)) {
+          const originalFills = node.fills.length;
           node.fills = node.fills.map((fill: any) => {
             if (fill.type === 'IMAGE') {
+              Logger.debug(`Updated IMAGE fill for ${node.name} with path: ${imagePath}`);
               return {
                 ...fill,
                 // Add custom property for image path that our Flutter generator can use
@@ -276,18 +296,20 @@ export class CodeGenerator {
             }
             return fill;
           });
+          Logger.debug(`Processed ${originalFills} fills for ${node.name}`);
         }
         
         // For vector nodes, add the image path directly
         if (node.type === 'VECTOR' || node.type === 'BOOLEAN_OPERATION') {
           node.localImagePath = imagePath;
+          Logger.debug(`Set localImagePath for vector ${node.name}: ${imagePath}`);
         }
       }
     }
 
     // Recursively update children
     if (node.children && Array.isArray(node.children)) {
-      node.children.forEach((child: any) => this.updateImagePaths(child, exportedImages));
+      node.children.forEach((child: any) => this.updateImagePaths(child, exportedImages, imageOptions));
     }
   }
 

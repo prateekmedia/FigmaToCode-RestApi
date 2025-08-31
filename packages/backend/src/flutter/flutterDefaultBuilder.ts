@@ -41,23 +41,12 @@ export class FlutterDefaultBuilder {
   }
 
   position(node: SceneNode): this {
-    console.log(`POSITION METHOD CALLED for "${node.name}" (${node.type})`);
-    
     const isCommonAbsolute = commonIsAbsolutePosition(node);
     const shouldUseCustom = this.shouldUseAbsolutePositioning(node);
-    
-    if (node.name === "Label" && node.type === "TEXT") {
-      console.log(`POSITION DECISION for Cancel TEXT:`, {
-        isCommonAbsolute,
-        shouldUseCustom,
-        willApplyPositioning: isCommonAbsolute || shouldUseCustom
-      });
-    }
     
     // Apply positioning when appropriate
     if (isCommonAbsolute) {
       const { x, y } = getCommonPositionValue(node);
-      console.log(`Using commonIsAbsolutePosition for "${node.name}":`, { x, y });
       this.child = generateWidgetCode("Positioned", {
         left: x,
         top: y,
@@ -67,15 +56,12 @@ export class FlutterDefaultBuilder {
       // Use absoluteBoundingBox for Stack children that need positioning
       const position = this.getRelativePosition(node);
       if (position) {
-        console.log(`Applying Positioned wrapper to "${node.name}":`, position);
         this.child = generateWidgetCode("Positioned", {
           left: position.left,
           top: position.top,
           child: this.child,
         });
       }
-    } else {
-      console.log(`No positioning applied to "${node.name}"`);
     }
     return this;
   }
@@ -93,14 +79,6 @@ export class FlutterDefaultBuilder {
     // Check if parent will generate a Stack widget
     const willGenerateStack = this.willParentGenerateStack(parent);
     
-    console.log(`STACK PARENT DEBUG for "${node.name}":`, {
-      parentName: parent.name,
-      parentType: parent.type,
-      parentLayoutMode: parent.layoutMode,
-      willGenerateStack,
-      parentBounds: parent.absoluteBoundingBox,
-      nodeBounds: (node as any).absoluteBoundingBox
-    });
     
     return willGenerateStack ? parent : null;
   }
@@ -125,14 +103,6 @@ export class FlutterDefaultBuilder {
     // Also detect frames that currently generate Stack in output (like Frame 1412769182)
     const shouldUseStack = noLayoutMode || hasAbsoluteChildren || (isRootFrame && noInferredLayout) || isAutoLayout;
     
-    console.log(`STACK DETECTION for "${parent.name}":`, {
-      layoutMode: parent.layoutMode,
-      noLayoutMode,
-      hasAbsoluteChildren,
-      isRootFrame,
-      isAutoLayout,
-      shouldUseStack
-    });
     
     return shouldUseStack;
   }
@@ -152,11 +122,6 @@ export class FlutterDefaultBuilder {
     const relativeLeft = absoluteBounds.x - parentBounds.x;
     const relativeTop = absoluteBounds.y - parentBounds.y;
     
-    console.log(`RELATIVE POSITION for "${node.name}":`, {
-      childAbsolute: { x: absoluteBounds.x, y: absoluteBounds.y },
-      parentAbsolute: { x: parentBounds.x, y: parentBounds.y },
-      calculated: { left: relativeLeft, top: relativeTop }
-    });
     
     return { left: relativeLeft, top: relativeTop };
   }
@@ -164,7 +129,6 @@ export class FlutterDefaultBuilder {
   positionInStack(node: SceneNode, stackContext: { absoluteBoundingBox: any, name: string }): this {
     const nodeBounds = (node as any).absoluteBoundingBox;
     if (!nodeBounds || !stackContext.absoluteBoundingBox) {
-      console.log(`No bounds available for positioning "${node.name}" in Stack "${stackContext.name}"`);
       return this;
     }
 
@@ -172,11 +136,6 @@ export class FlutterDefaultBuilder {
     const relativeLeft = nodeBounds.x - stackContext.absoluteBoundingBox.x;
     const relativeTop = nodeBounds.y - stackContext.absoluteBoundingBox.y;
 
-    console.log(`POSITIONING IN STACK "${stackContext.name}" for "${node.name}":`, {
-      stackBounds: { x: stackContext.absoluteBoundingBox.x, y: stackContext.absoluteBoundingBox.y },
-      nodeBounds: { x: nodeBounds.x, y: nodeBounds.y },
-      relative: { left: relativeLeft, top: relativeTop }
-    });
 
     // Apply Positioned wrapper
     this.child = generateWidgetCode("Positioned", {
