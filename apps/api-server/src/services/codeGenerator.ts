@@ -13,6 +13,7 @@ import {
 import { resetPerformanceCounters } from "../../../../packages/backend/src/altNodes/jsonNodeConversion";
 import { Logger } from "./logger";
 import { AppError } from "../middleware/errorHandler";
+import { ExportedImageInfo } from "./imageExporter";
 
 export interface CodeGenerationResult {
   code: string;
@@ -29,7 +30,8 @@ export class CodeGenerator {
    */
   static async generateCode(
     restApiNodes: any[], 
-    settings: PluginSettings
+    settings: PluginSettings,
+    exportedImages?: ExportedImageInfo
   ): Promise<CodeGenerationResult> {
     // Reset performance counters and warnings like the plugin does
     resetPerformanceCounters();
@@ -45,7 +47,7 @@ export class CodeGenerator {
     // we directly use the REST API node data which is already in JSON format
     // We just need to process it to match the internal format
     Logger.debug('Processing REST API nodes...');
-    const convertedSelection = await this.processRestApiNodes(restApiNodes, settings);
+    const convertedSelection = await this.processRestApiNodes(restApiNodes, settings, exportedImages);
     
     if (convertedSelection.length === 0) {
       throw new AppError('No nodes could be converted', 400);
@@ -85,14 +87,14 @@ export class CodeGenerator {
    * Processes REST API nodes to match the format the backend expects
    * This bypasses nodesToJSON since we already have JSON data from the REST API
    */
-  private static async processRestApiNodes(restApiNodes: any[], settings: PluginSettings): Promise<any[]> {
+  private static async processRestApiNodes(restApiNodes: any[], settings: PluginSettings, exportedImages?: ExportedImageInfo): Promise<any[]> {
     // First pass: normalize coordinates to 0-based system
     const normalizedNodes = this.normalizeCoordinates(restApiNodes);
     
     const processedNodes = [];
     for (const node of normalizedNodes) {
       // Process the node to match what nodesToJSON would output
-      const processedNode = await this.processRestApiNode(node, settings);
+      const processedNode = await this.processRestApiNode(node, settings, exportedImages);
       if (processedNode) {
         processedNodes.push(processedNode);
       }
@@ -161,7 +163,7 @@ export class CodeGenerator {
   /**
    * Processes a single REST API node to match backend expectations
    */
-  private static async processRestApiNode(node: any, settings: PluginSettings): Promise<any> {
+  private static async processRestApiNode(node: any, settings: PluginSettings, exportedImages?: ExportedImageInfo): Promise<any> {
     // Start with the node as-is since REST API already provides JSON
     const processedNode = {
       ...node,
@@ -187,11 +189,16 @@ export class CodeGenerator {
     if (node.children && Array.isArray(node.children)) {
       processedNode.children = [];
       for (const child of node.children) {
-        const processedChild = await this.processRestApiNode(child, settings);
+        const processedChild = await this.processRestApiNode(child, settings, exportedImages);
         if (processedChild) {
           processedNode.children.push(processedChild);
         }
       }
+    }
+
+    // Replace image placeholders with actual paths if available
+    if (exportedImages) {
+      this.updateImagePaths(processedNode, exportedImages);
     }
 
     // Map REST API layout properties to expected format for Flutter generation
@@ -224,7 +231,7 @@ export class CodeGenerator {
    */
   private static async extractColors(nodes: any[]): Promise<any[]> {
     try {
-      return retrieveGenericSolidUIColors(nodes);
+      return retrieveGenericSolidUIColors(nodes as any);
     } catch (error) {
       Logger.warn('Color extraction failed:', error);
       return [];
@@ -236,10 +243,62 @@ export class CodeGenerator {
    */
   private static async extractGradients(nodes: any[]): Promise<any[]> {
     try {
-      return retrieveGenericLinearGradients(nodes);
+      return retrieveGenericLinearGradients(nodes as any);
     } catch (error) {
       Logger.warn('Gradient extraction failed:', error);
       return [];
     }
+  }
+
+  /**
+   * Updates image paths in processed nodes to use actual downloaded images
+   */
+  private static updateImagePaths(node: any, exportedImages: ExportedImageInfo): void {
+    const sanitizedName = this.sanitizeNodeName(node.name || '');
+    
+    // Check if this node has exported images
+    if (exportedImages[sanitizedName]) {
+      const imageData = exportedImages[sanitizedName];
+      
+      // For Flutter, we typically want 1x image path, but could be configurable
+      if (imageData['1x'] && imageData['1x']['png']) {
+        const imagePath = imageData['1x']['png'];
+        
+        // Update fills if they contain image references
+        if (node.fills && Array.isArray(node.fills)) {
+          node.fills = node.fills.map((fill: any) => {
+            if (fill.type === 'IMAGE') {
+              return {
+                ...fill,
+                // Add custom property for image path that our Flutter generator can use
+                localImagePath: imagePath,
+              };
+            }
+            return fill;
+          });
+        }
+        
+        // For vector nodes, add the image path directly
+        if (node.type === 'VECTOR' || node.type === 'BOOLEAN_OPERATION') {
+          node.localImagePath = imagePath;
+        }
+      }
+    }
+
+    // Recursively update children
+    if (node.children && Array.isArray(node.children)) {
+      node.children.forEach((child: any) => this.updateImagePaths(child, exportedImages));
+    }
+  }
+
+  /**
+   * Sanitizes node name to match the filename sanitization in ImageExporter
+   */
+  private static sanitizeNodeName(name: string): string {
+    return name
+      .replace(/[^a-zA-Z0-9_-]/g, '_')
+      .replace(/_{2,}/g, '_')
+      .replace(/^_|_$/g, '')
+      .toLowerCase() || 'unnamed';
   }
 }

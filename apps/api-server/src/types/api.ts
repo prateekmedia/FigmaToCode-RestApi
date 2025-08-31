@@ -9,6 +9,13 @@ export interface ConvertRequest {
     filename?: string;
     saveToFile?: boolean;
   };
+  exportImages?: boolean;
+  exportImagesOptions?: {
+    scales?: string[];
+    formats?: string[];
+    directory?: string;
+    customDirectories?: { [scale: string]: string };
+  };
 }
 
 export interface ConvertResponse {
@@ -18,6 +25,13 @@ export interface ConvertResponse {
   gradients: GradientInfo[];
   warnings: string[];
   filePath?: string;
+  exportedImages?: {
+    [nodeName: string]: {
+      [scale: string]: {
+        [format: string]: string;
+      };
+    };
+  };
 }
 
 export interface ColorInfo {

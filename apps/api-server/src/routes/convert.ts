@@ -5,6 +5,7 @@ import { FigmaUrlParser } from '../services/urlParser';
 import { FigmaAdapter } from '../adapters/figmaAdapter';
 import { CodeGenerator } from '../services/codeGenerator';
 import { FileManager } from '../services/fileManager';
+import { ImageExporter } from '../services/imageExporter';
 import { Logger } from '../services/logger';
 import { asyncHandler, AppError } from '../middleware/errorHandler';
 import { PluginSettings } from 'types';
@@ -77,6 +78,8 @@ const validateRequest = (body: any): ConvertRequest => {
     token: body.token,
     settings,
     output,
+    exportImages: body.exportImages,
+    exportImagesOptions: body.exportImagesOptions,
   };
 };
 
@@ -85,7 +88,7 @@ convertRoute.post('/', asyncHandler(async (req, res) => {
   
   // Validate request
   const validatedRequest = validateRequest(req.body);
-  const { url, token, settings, output } = validatedRequest;
+  const { url, token, settings, output, exportImages, exportImagesOptions } = validatedRequest;
 
   // Parse Figma URL
   const urlParts = FigmaUrlParser.parse(url);
@@ -114,9 +117,22 @@ convertRoute.post('/', asyncHandler(async (req, res) => {
     throw new AppError('No nodes could be found or processed from the provided URL', 400);
   }
 
+  // Export images if requested
+  let exportedImages;
+  if (exportImages) {
+    Logger.info('Exporting images...');
+    const imageExporter = new ImageExporter(figmaClient);
+    exportedImages = await imageExporter.exportImages(
+      urlParts.fileKey,
+      restApiNodes,
+      exportImagesOptions
+    );
+    Logger.info('Image export completed');
+  }
+
   // Generate code using existing backend
   Logger.info('Generating code...');
-  const result = await CodeGenerator.generateCode(restApiNodes, settings as PluginSettings);
+  const result = await CodeGenerator.generateCode(restApiNodes, settings as PluginSettings, exportedImages);
 
   Logger.info('Code generation completed');
 
@@ -127,6 +143,7 @@ convertRoute.post('/', asyncHandler(async (req, res) => {
     colors: result.colors,
     gradients: result.gradients,
     warnings: result.warnings,
+    exportedImages,
   };
 
   // Save to file if requested

@@ -20,6 +20,10 @@ export interface FigmaNodesResponse {
   nodes: { [key: string]: any };
 }
 
+export interface FigmaImageResponse {
+  images: { [key: string]: string };
+}
+
 export class FigmaClient {
   private client: AxiosInstance;
   
@@ -94,6 +98,31 @@ export class FigmaClient {
       return { file };
     } catch (error) {
       throw error;
+    }
+  }
+
+  async getImageUrls(fileKey: string, nodeIds: string[], options: {
+    format?: 'png' | 'svg' | 'jpg';
+    scale?: number;
+  } = {}): Promise<FigmaImageResponse> {
+    try {
+      const { format = 'png', scale = 1 } = options;
+      const idsParam = nodeIds.join(',');
+      const response = await this.client.get(
+        `/images/${fileKey}?ids=${idsParam}&format=${format}&scale=${scale}`
+      );
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async downloadImage(imageUrl: string): Promise<Buffer> {
+    try {
+      const response = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+      return Buffer.from(response.data);
+    } catch (error) {
+      throw new AppError(`Failed to download image: ${error instanceof Error ? error.message : 'Unknown error'}`, 500);
     }
   }
 }
