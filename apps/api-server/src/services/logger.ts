@@ -1,7 +1,8 @@
 export class Logger {
   private static log(level: string, message: string, ...args: any[]) {
     const timestamp = new Date().toISOString();
-    console.log(`[${timestamp}] [${level}] ${message}`, ...args);
+    const formattedArgs = args.length > 0 ? ` ${JSON.stringify(args)}` : '';
+    console.log(`[${timestamp}] [${level}] ${message}${formattedArgs}`);
   }
 
   static info(message: string, ...args: any[]) {
@@ -17,7 +18,7 @@ export class Logger {
   }
 
   static debug(message: string, ...args: any[]) {
-    if (process.env.NODE_ENV === 'development') {
+    if (process.env.NODE_ENV === 'development' || process.env.LOG_LEVEL === 'debug') {
       this.log('DEBUG', message, ...args);
     }
   }

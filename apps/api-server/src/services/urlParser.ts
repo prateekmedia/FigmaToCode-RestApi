@@ -1,4 +1,5 @@
 import { FigmaUrlParts } from '../types/api';
+import { AppError } from '../middleware/errorHandler';
 
 export class FigmaUrlParser {
   static parse(url: string): FigmaUrlParts {
@@ -7,7 +8,7 @@ export class FigmaUrlParser {
       
       // Check if it's a valid Figma URL
       if (!urlObj.hostname.includes('figma.com')) {
-        throw new Error('URL is not a valid Figma URL');
+        throw new AppError('URL is not a valid Figma URL', 400);
       }
 
       // Extract file key from path
@@ -18,7 +19,7 @@ export class FigmaUrlParser {
       const pathMatch = urlObj.pathname.match(/\/(design|file|proto)\/([a-zA-Z0-9]+)/);
       
       if (!pathMatch || !pathMatch[2]) {
-        throw new Error('Could not extract file key from URL');
+        throw new AppError('Could not extract file key from URL', 400);
       }
 
       const fileKey = pathMatch[2];
@@ -38,9 +39,9 @@ export class FigmaUrlParser {
       };
     } catch (error) {
       if (error instanceof Error) {
-        throw new Error(`Invalid Figma URL: ${error.message}`);
+        throw new AppError(`Invalid Figma URL: ${error.message}`, 400);
       }
-      throw new Error('Invalid Figma URL format');
+      throw new AppError('Invalid Figma URL format', 400);
     }
   }
 

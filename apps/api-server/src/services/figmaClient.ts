@@ -1,4 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
+import { AppError } from '../middleware/errorHandler';
 
 export interface FigmaFileResponse {
   document: any;
@@ -41,19 +42,19 @@ export class FigmaClient {
           const message = error.response.data?.message || error.message;
           
           if (status === 401) {
-            throw new Error('Invalid Figma token or insufficient permissions');
+            throw new AppError('Invalid Figma token or insufficient permissions', 401);
           } else if (status === 403) {
-            throw new Error('Access denied. Check file permissions or token scope');
+            throw new AppError('Access denied. Check file permissions or token scope', 403);
           } else if (status === 404) {
-            throw new Error('Figma file or node not found');
+            throw new AppError('Figma file or node not found', 404);
           } else if (status === 429) {
-            throw new Error('Rate limit exceeded. Please try again later');
+            throw new AppError('Rate limit exceeded. Please try again later', 429);
           }
           
-          throw new Error(`Figma API error (${status}): ${message}`);
+          throw new AppError(`Figma API error (${status}): ${message}`, status);
         }
         
-        throw new Error(`Network error: ${error.message}`);
+        throw new AppError(`Network error: ${error.message}`, 500);
       }
     );
   }

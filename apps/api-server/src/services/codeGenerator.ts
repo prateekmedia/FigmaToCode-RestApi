@@ -11,6 +11,8 @@ import {
   clearWarnings 
 } from "../../../../packages/backend/src/common/commonConversionWarnings";
 import { resetPerformanceCounters } from "../../../../packages/backend/src/altNodes/jsonNodeConversion";
+import { Logger } from "./logger";
+import { AppError } from "../middleware/errorHandler";
 
 export interface CodeGenerationResult {
   code: string;
@@ -33,42 +35,42 @@ export class CodeGenerator {
     resetPerformanceCounters();
     clearWarnings();
 
-    console.log(`Starting code generation for ${restApiNodes.length} nodes`);
+    Logger.info(`Starting code generation for ${restApiNodes.length} nodes`);
 
     if (restApiNodes.length === 0) {
-      throw new Error('No nodes provided for conversion');
+      throw new AppError('No nodes provided for conversion', 400);
     }
 
     // The key insight: instead of using nodesToJSON which expects plugin nodes,
     // we directly use the REST API node data which is already in JSON format
     // We just need to process it to match the internal format
-    console.log('Processing REST API nodes...');
+    Logger.debug('Processing REST API nodes...');
     const convertedSelection = await this.processRestApiNodes(restApiNodes, settings);
     
     if (convertedSelection.length === 0) {
-      throw new Error('No nodes could be converted');
+      throw new AppError('No nodes could be converted', 400);
     }
 
-    console.log(`Processed ${convertedSelection.length} nodes`);
+    Logger.debug(`Processed ${convertedSelection.length} nodes`);
 
     // Generate code using existing backend logic
-    console.log(`Generating ${settings.framework} code...`);
+    Logger.debug(`Generating ${settings.framework} code...`);
     const code = await convertToCode(convertedSelection, settings);
 
     // Generate HTML preview
-    console.log('Generating HTML preview...');
+    Logger.debug('Generating HTML preview...');
     const htmlPreviewResult = await generateHTMLPreview(convertedSelection, settings);
     const htmlPreview = typeof htmlPreviewResult === 'string' ? htmlPreviewResult : htmlPreviewResult.content;
 
-    // Extract colors and gradients (skip for now in API mode)
-    console.log('Skipping color extraction in API mode...');
-    const colors: any[] = [];
-    const gradients: any[] = [];
+    // Extract colors and gradients
+    Logger.debug('Extracting colors and gradients...');
+    const colors = await this.extractColors(convertedSelection);
+    const gradients = await this.extractGradients(convertedSelection);
 
     // Get any warnings that were generated
     const generatedWarnings: string[] = Array.from(warnings);
 
-    console.log('Code generation completed successfully');
+    Logger.info('Code generation completed successfully');
 
     return {
       code,
@@ -215,5 +217,29 @@ export class CodeGenerator {
     }
     
     return processedNode;
+  }
+
+  /**
+   * Extracts colors from processed nodes
+   */
+  private static async extractColors(nodes: any[]): Promise<any[]> {
+    try {
+      return retrieveGenericSolidUIColors(nodes);
+    } catch (error) {
+      Logger.warn('Color extraction failed:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Extracts gradients from processed nodes
+   */
+  private static async extractGradients(nodes: any[]): Promise<any[]> {
+    try {
+      return retrieveGenericLinearGradients(nodes);
+    } catch (error) {
+      Logger.warn('Gradient extraction failed:', error);
+      return [];
+    }
   }
 }

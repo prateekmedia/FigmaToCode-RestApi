@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { Logger } from './logger';
+import { AppError } from '../middleware/errorHandler';
 
 export interface SaveFileOptions {
   directory?: string;
@@ -42,7 +43,7 @@ export class FileManager {
 
       // Validate file path is safe (no directory traversal)
       if (!filePath.startsWith(resolvedDirectory)) {
-        throw new Error('Invalid file path: directory traversal detected');
+        throw new AppError('Invalid file path: directory traversal detected', 400);
       }
 
       // Write file
@@ -57,7 +58,7 @@ export class FileManager {
 
     } catch (error) {
       Logger.error('File save failed:', error);
-      throw new Error(`Failed to save file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new AppError(`Failed to save file: ${error instanceof Error ? error.message : 'Unknown error'}`, 500);
     }
   }
 
