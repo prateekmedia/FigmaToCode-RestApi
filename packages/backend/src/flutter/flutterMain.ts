@@ -239,6 +239,19 @@ const flutterFrame = (
   node: SceneNode & BaseFrameMixin & MinimalBlendMixin,
   stackParentContext?: { absoluteBoundingBox: any, name: string }
 ): string => {
+  // Debug layout properties
+  console.log(`[LAYOUT DEBUG] Frame "${node.name}":`, {
+    layoutMode: (node as any).layoutMode,
+    inferredAutoLayout: (node as any).inferredAutoLayout,
+    primaryAxisSizingMode: (node as any).primaryAxisSizingMode,
+    counterAxisSizingMode: (node as any).counterAxisSizingMode,
+    itemSpacing: (node as any).itemSpacing,
+    paddingLeft: (node as any).paddingLeft,
+    paddingRight: (node as any).paddingRight,
+    paddingTop: (node as any).paddingTop,
+    paddingBottom: (node as any).paddingBottom
+  });
+
   // Check if any direct children need absolute positioning
   const hasAbsoluteChildren = node.children.some(
     (child: any) => (child as any).layoutPositioning === "ABSOLUTE",
@@ -274,29 +287,18 @@ const flutterFrame = (
   const children = flutterWidgetGenerator(node.children, childContext);
 
 
-  // Use Stack for absolute positioned children or when no layout mode
-  if (hasAbsoluteChildren || isRootFrame || node.layoutMode === "NONE") {
-    const stackWidget = generateWidgetCode("Stack", {
-      children: children !== "" ? [children] : [],
-    });
-    
-    // Check if the generated Stack would be empty (recursive empty propagation)
-    if (isEmptyWidget(stackWidget)) {
-      return hasVisualStyling(node) ? flutterContainer(node, "", stackParentContext) : "";
-    }
-    
-    return flutterContainer(node, stackWidget, stackParentContext);
-  }
-
-  // Prioritize Column/Row layouts when auto-layout is detected
+  // PRIORITY 1: Auto-layout detected - use Column/Row (even if has absolute children or is root)
   if (node.layoutMode && (node.layoutMode as any) !== "NONE") {
+    console.log(`[LAYOUT DEBUG] Using auto-layout for ${node.name}: ${node.layoutMode}`);
     // For Row/Column layouts, generate children WITHOUT Stack context (no positioning)
     const rowColumnChildren = flutterWidgetGenerator(node.children);
     const rowColumnWrap = makeRowColumnWrap(node, rowColumnChildren);
+    console.log(`[LAYOUT DEBUG] Generated ${node.layoutMode === 'HORIZONTAL' ? 'Row' : 'Column'} for ${node.name}`);
     // Check if this frame needs Container wrapper for styling
     const needsContainerStyling = hasVisualStyling(node);
     return needsContainerStyling ? flutterContainer(node, rowColumnWrap, stackParentContext) : rowColumnWrap;
   } else if (node.inferredAutoLayout) {
+    console.log(`[LAYOUT DEBUG] Using inferred auto-layout for ${node.name}`);
     // For Row/Column layouts, generate children WITHOUT Stack context (no positioning)
     const rowColumnChildren = flutterWidgetGenerator(node.children);
     const rowColumnWrap = makeRowColumnWrap(node.inferredAutoLayout, rowColumnChildren);
@@ -305,49 +307,32 @@ const flutterFrame = (
     return needsContainerStyling ? flutterContainer(node, rowColumnWrap, stackParentContext) : rowColumnWrap;
   }
 
-  // Use Stack only when necessary (absolute positioned children, root frames, or no layout)
-  if (hasAbsoluteChildren || isRootFrame || !node.layoutMode || (node.layoutMode as any) === "NONE") {
-    // Don't create Stack if there are no meaningful children
-    if (children === "" || children.trim() === "") {
-      // Return empty widget or minimal container only if styling is needed
-      return hasVisualStyling(node) ? flutterContainer(node, "", stackParentContext) : "";
-    }
-    
-    const stackWidget = generateWidgetCode("Stack", {
-      children: [children],
-    });
-    
-    // Check if the generated Stack would be empty (recursive empty propagation)
-    if (isEmptyWidget(stackWidget)) {
-      return hasVisualStyling(node) ? flutterContainer(node, "", stackParentContext) : "";
-    }
-    
-    // Only wrap in Container if styling is needed
-    const needsContainerStyling = hasVisualStyling(node);
-    return needsContainerStyling ? flutterContainer(node, stackWidget, stackParentContext) : stackWidget;
-  }
-
-  if (node.isAsset) {
-    return flutterContainer(node, generateWidgetCode("FlutterLogo", {}), stackParentContext);
-  }
-
-  // Default to Stack for frames without any layout info
+  // PRIORITY 2: Fall back to Stack only when no auto-layout is available
+  console.log(`[LAYOUT DEBUG] Using Stack for ${node.name} because no auto-layout detected:`, {
+    hasAbsoluteChildren,
+    isRootFrame, 
+    noLayoutMode: !node.layoutMode,
+    layoutModeNone: (node.layoutMode as any) === "NONE"
+  });
+  
+  // Don't create Stack if there are no meaningful children
   if (children === "" || children.trim() === "") {
+    // Return empty widget or minimal container only if styling is needed
     return hasVisualStyling(node) ? flutterContainer(node, "", stackParentContext) : "";
   }
   
-  const defaultStackWidget = generateWidgetCode("Stack", {
+  const stackWidget = generateWidgetCode("Stack", {
     children: [children],
   });
   
   // Check if the generated Stack would be empty (recursive empty propagation)
-  if (isEmptyWidget(defaultStackWidget)) {
+  if (isEmptyWidget(stackWidget)) {
     return hasVisualStyling(node) ? flutterContainer(node, "", stackParentContext) : "";
   }
   
   // Only wrap in Container if styling is needed
   const needsContainerStyling = hasVisualStyling(node);
-  return needsContainerStyling ? flutterContainer(node, defaultStackWidget, stackParentContext) : defaultStackWidget;
+  return needsContainerStyling ? flutterContainer(node, stackWidget, stackParentContext) : stackWidget;
 };
 
 const makeRowColumnWrap = (
