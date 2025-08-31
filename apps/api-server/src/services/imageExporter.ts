@@ -27,6 +27,7 @@ export interface ImageNode {
   id: string;
   name: string;
   type: string;
+  priority?: number;
 }
 
 export class ImageExporter {
@@ -54,44 +55,35 @@ export class ImageExporter {
     const imageNodes: ImageNode[] = [];
     
     const findImages = (node: any) => {
-      // Check if node has image fills - be more inclusive
+      // Priority 1: Actual image fills (most important)
       if (node.fills && Array.isArray(node.fills)) {
         const hasImageFill = node.fills.some((fill: any) => 
           fill.type === 'IMAGE' && fill.visible !== false
         );
         if (hasImageFill) {
+          const priority = (node.type === 'FRAME' || node.type === 'RECTANGLE') ? 1 : 2;
           imageNodes.push({
             id: node.id,
             name: node.name || `image_${node.id}`,
             type: node.type,
+            priority,
           });
-          Logger.debug(`Found image node: ${node.name} (${node.type}) with ID: ${node.id}`);
+          Logger.debug(`Found priority ${priority} image node: ${node.name} (${node.type}) with ID: ${node.id}`);
         }
       }
 
-      // Include vector nodes that might have exportable content
-      if (node.type === 'VECTOR' || node.type === 'BOOLEAN_OPERATION') {
+      // Priority 3: Large vector nodes only (skip tiny icons)
+      if ((node.type === 'VECTOR' || node.type === 'BOOLEAN_OPERATION') && 
+          node.absoluteBoundingBox && 
+          node.absoluteBoundingBox.width > 32 && 
+          node.absoluteBoundingBox.height > 32) {
         imageNodes.push({
           id: node.id,
           name: node.name || `vector_${node.id}`,
           type: node.type,
+          priority: 3,
         });
-        Logger.debug(`Found vector node: ${node.name} (${node.type}) with ID: ${node.id}`);
-      }
-
-      // Also check for any node that might generate images in Flutter
-      if (node.type === 'FRAME' || node.type === 'COMPONENT' || node.type === 'INSTANCE') {
-        if (node.fills && Array.isArray(node.fills)) {
-          const hasImageFill = node.fills.some((fill: any) => fill.type === 'IMAGE');
-          if (hasImageFill) {
-            imageNodes.push({
-              id: node.id,
-              name: node.name || `frame_image_${node.id}`,
-              type: node.type,
-            });
-            Logger.debug(`Found frame with image: ${node.name} (${node.type}) with ID: ${node.id}`);
-          }
-        }
+        Logger.debug(`Found priority 3 vector node: ${node.name} (${node.type}) with ID: ${node.id}`);
       }
 
       // Recursively check children
@@ -101,7 +93,11 @@ export class ImageExporter {
     };
 
     nodes.forEach(findImages);
-    Logger.debug(`Total image nodes found: ${imageNodes.length}`);
+    
+    // Sort by priority (1 = highest, 3 = lowest)
+    imageNodes.sort((a, b) => (a.priority || 999) - (b.priority || 999));
+    
+    Logger.debug(`Total image nodes found: ${imageNodes.length}, prioritized by importance`);
     return imageNodes;
   }
 
@@ -128,22 +124,27 @@ export class ImageExporter {
     // Create base directory
     await this.ensureDirectory(exportOptions.directory);
 
-    // Process images with better error handling and limits
-    for (let i = 0; i < Math.min(imageNodes.length, 10); i++) {
-      const imageNode = imageNodes[i];
-      Logger.debug(`Exporting images for node ${i + 1}/${imageNodes.length}: ${imageNode.name}`);
+    // Process images with concurrent downloads for better performance
+    const limitedNodes = imageNodes.slice(0, 5); // Limit to 5 most important nodes
+    Logger.info(`Processing ${limitedNodes.length} of ${imageNodes.length} image nodes`);
+    
+    // Process all nodes concurrently
+    const exportPromises = limitedNodes.map(async (imageNode, i) => {
+      Logger.debug(`Starting export for node ${i + 1}/${limitedNodes.length}: ${imageNode.name}`);
       
       const sanitizedName = this.sanitizeFilename(imageNode.name);
-      exportedImages[imageNode.id] = {};
+      const nodeExports: { [scale: string]: { [format: string]: string } } = {};
 
-      for (const scale of exportOptions.scales) {
+      // Process scales concurrently
+      const scalePromises = exportOptions.scales.map(async (scale) => {
         const scaleNumber = this.parseScale(scale);
         const scaleDir = path.join(exportOptions.directory, exportOptions.customDirectories[scale] || `${scale}/`);
         
         await this.ensureDirectory(scaleDir);
-        exportedImages[imageNode.id][scale] = {};
+        nodeExports[scale] = {};
 
-        for (const format of exportOptions.formats) {
+        // Process formats concurrently
+        const formatPromises = exportOptions.formats.map(async (format) => {
           try {
             const filePath = await this.exportSingleImage(
               fileKey,
@@ -155,20 +156,31 @@ export class ImageExporter {
               scale
             );
             
-            // Store relative path from images directory
             const relativePath = path.relative(exportOptions.directory, filePath);
-            exportedImages[imageNode.id][scale][format] = relativePath;
+            nodeExports[scale][format] = relativePath;
             
           } catch (error) {
             Logger.warn(`Failed to export ${sanitizedName} at ${scale} in ${format}:`, error);
-            // Continue with other exports even if one fails
           }
-        }
-      }
+        });
+
+        await Promise.all(formatPromises);
+      });
+
+      await Promise.all(scalePromises);
+      return { nodeId: imageNode.id, exports: nodeExports };
+    });
+
+    // Wait for all exports to complete
+    const results = await Promise.all(exportPromises);
+    
+    // Merge results into exportedImages
+    for (const result of results) {
+      exportedImages[result.nodeId] = result.exports;
     }
 
-    if (imageNodes.length > 10) {
-      Logger.warn(`Limited image export to first 10 nodes (found ${imageNodes.length} total). Use more specific node selection for full export.`);
+    if (imageNodes.length > 5) {
+      Logger.warn(`Limited image export to first 5 nodes (found ${imageNodes.length} total). Use more specific node selection for full export.`);
     }
 
     return exportedImages;
