@@ -45,7 +45,6 @@ export const generateWidgetCode = (
   properties: Record<string, number | string | string[]>,
   positionedValues?: string[],
 ): string => {
-  console.log("properties", properties);
   const propertiesArray = Object.entries(properties)
     .filter(([, value]) => {
       if (Array.isArray(value)) {
@@ -55,7 +54,15 @@ export const generateWidgetCode = (
     })
     .map(([key, value]) => {
       if (Array.isArray(value)) {
-        return `${key}: [\n${indentStringFlutter(value.join(",\n"))},\n],`;
+        if (value.length === 0) {
+          return `${key}: [],`;
+        }
+        // Filter out empty strings from the array before joining
+        const filteredValues = value.filter(v => v && v.trim() !== "");
+        if (filteredValues.length === 0) {
+          return `${key}: [],`;
+        }
+        return `${key}: [\n${indentStringFlutter(filteredValues.join(",\n"))},\n],`;
       } else {
         return `${key}: ${
           typeof value === "number" ? numberToFixedString(value) : value

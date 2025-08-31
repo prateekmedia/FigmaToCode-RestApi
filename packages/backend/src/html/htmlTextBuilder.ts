@@ -257,8 +257,8 @@ export class HtmlTextBuilder extends HtmlDefaultBuilder {
           effect.visible !== false &&
           effect.radius > 0,
       );
-      if (blurEffect && blurEffect.radius) {
-        return `blur(${blurEffect.radius}px)`;
+      if (blurEffect && (blurEffect as any).radius) {
+        return `blur(${(blurEffect as any).radius}px)`;
       }
     }
     return "";

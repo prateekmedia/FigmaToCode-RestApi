@@ -96,7 +96,7 @@ export const retrieveGenericLinearGradients = async (
   await Promise.all(
     selectionColors.paints.map(async (paint) => {
       if (paint.type === "GRADIENT_LINEAR") {
-        let fill = { ...paint };
+        let fill: any = { ...paint };
         const t = fill.gradientTransform;
         fill.gradientHandlePositions = [
           { x: t[0][2], y: t[1][2] }, // Start: (e, f)
@@ -128,20 +128,20 @@ export const retrieveGenericLinearGradients = async (
         let exportValue = "";
         switch (framework) {
           case "Flutter":
-            exportValue = flutterGradient(fill);
+            exportValue = flutterGradient(fill as any);
             break;
           case "HTML":
-            exportValue = htmlGradientFromFills(fill);
+            exportValue = htmlGradientFromFills(fill as any);
             break;
           case "Tailwind":
-            exportValue = tailwindGradient(fill);
+            exportValue = tailwindGradient(fill as any);
             break;
           case "SwiftUI":
-            exportValue = swiftuiGradient(fill);
+            exportValue = swiftuiGradient(fill as any);
             break;
         }
         colorStr.push({
-          cssPreview: htmlGradientFromFills(fill),
+          cssPreview: htmlGradientFromFills(fill as any),
           exportValue,
         });
       }

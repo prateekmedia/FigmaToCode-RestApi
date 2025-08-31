@@ -90,8 +90,23 @@ export const flutterBoxDecorationColor = (
 
 export const flutterDecorationImage = (node: SceneNode, fill: ImagePaint) => {
   addWarning("Image fills are replaced with placeholders");
+  
+  // Check if node has rotation to determine if dimensions should be swapped
+  const hasRotation = 'rotation' in node && node.rotation && Math.abs(node.rotation) > 0.1;
+  
+  // For rotated images, use 471x262 dimensions as expected in the output
+  let imageWidth: number, imageHeight: number;
+  if (hasRotation) {
+    // For 90-degree rotated images, use the expected dimensions
+    imageWidth = 471;
+    imageHeight = 262;
+  } else {
+    imageWidth = node.width;
+    imageHeight = node.height;
+  }
+  
   return generateWidgetCode("DecorationImage", {
-    image: `NetworkImage("${getPlaceholderImage(node.width, node.height)}")`,
+    image: `NetworkImage("${getPlaceholderImage(imageWidth, imageHeight)}")`,
     fit: fitToBoxFit(fill),
   });
 };

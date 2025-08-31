@@ -60,13 +60,28 @@ export const flutterRotation = (node: AltNode, child: string): string => {
  * Generates a rotation matrix string for Flutter transforms
  */
 export const generateRotationMatrix = (node: AltNode): string => {
-  const rotation = (node.rotation || 0) + (node.cumulativeRotation || 0);
+  let rotation = (node.rotation || 0) + (node.cumulativeRotation || 0);
 
-  if (Math.round(rotation) === 0) {
+  if (Math.abs(rotation) < 0.01) {
     return "";
   }
 
-  return `Matrix4.identity()..translate(0.0, 0.0)..rotateZ(${numberToFixedString(
-    rotation * (-Math.PI / 180),
-  )})`;
+  // Figma provides rotation in radians, not degrees
+  // So we use the rotation value directly without conversion
+  const rotationInRadians = rotation;
+  const halfPi = Math.PI / 2;
+  
+  // Check if rotation is close to 90, 180, 270, or 360 degrees
+  const normalizedRotations = [0, halfPi, Math.PI, 3 * halfPi, 2 * Math.PI];
+  for (const targetRotation of normalizedRotations) {
+    if (Math.abs(rotationInRadians - targetRotation) < 0.2) {
+      if (targetRotation === 0 || targetRotation === 2 * Math.PI) {
+        return "";
+      }
+      return `Matrix4.identity()..translate(0.0, 0.0)..rotateZ(${numberToFixedString(targetRotation)})`;
+    }
+  }
+
+  // For non-standard rotations, use the rotation value directly (already in radians)
+  return `Matrix4.identity()..translate(0.0, 0.0)..rotateZ(${numberToFixedString(rotationInRadians)})`;
 };

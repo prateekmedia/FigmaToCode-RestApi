@@ -26,6 +26,16 @@ export const flutterContainer = (node: SceneNode, child: string): string => {
   // ignore for Groups
   const propBoxDecoration = getDecoration(node);
   const { width, height, isExpanded, constraints } = flutterSize(node);
+  
+  // For root frames, ensure explicit dimensions are always set
+  const isRootFrame = (node as any).__isRoot || (!(node as any).parent);
+  let finalWidth = width;
+  let finalHeight = height;
+  
+  if (isRootFrame && node.width && node.height) {
+    finalWidth = numberToFixedString(node.width);
+    finalHeight = numberToFixedString(node.height);
+  }
 
   const clipBehavior =
     "clipsContent" in node && node.clipsContent === true
@@ -47,15 +57,15 @@ export const flutterContainer = (node: SceneNode, child: string): string => {
 
   // If node has rotation, get the matrix for the transform property
   if ("rotation" in node) {
-    const matrix = generateRotationMatrix(node);
+    const matrix = generateRotationMatrix(node as any);
     if (matrix) {
       properties.transform = matrix;
     }
   }
 
-  if (width || height || propBoxDecoration || clipBehavior) {
-    properties.width = skipDefaultProperty(width, "0");
-    properties.height = skipDefaultProperty(height, "0");
+  if (finalWidth || finalHeight || propBoxDecoration || clipBehavior) {
+    properties.width = skipDefaultProperty(finalWidth, "0");
+    properties.height = skipDefaultProperty(finalHeight, "0");
     properties.padding = propPadding;
     properties.clipBehavior = clipBehavior;
 

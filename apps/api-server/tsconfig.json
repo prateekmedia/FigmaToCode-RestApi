@@ -1,0 +1,50 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "lib": [
+      "ES2022",
+      "ES2015",
+      "DOM"
+    ],
+    "outDir": "dist",
+    "strict": false,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true,
+    "noImplicitThis": false,
+    "strictNullChecks": false,
+    "strictFunctionTypes": false,
+    "forceConsistentCasingInFileNames": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "resolveJsonModule": true,
+    "moduleResolution": "node",
+    "noImplicitAny": false,
+    "types": [
+      "node"
+    ],
+    "baseUrl": "../..",
+    "paths": {
+      "backend/*": [
+        "packages/backend/src/*"
+      ],
+      "types": [
+        "packages/types/src/index"
+      ],
+      "types/*": [
+        "packages/types/src/*"
+      ]
+    }
+  },
+  "include": [
+    "src/**/*",
+    "../../packages/types/src/**/*",
+    "../../packages/backend/src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
+}

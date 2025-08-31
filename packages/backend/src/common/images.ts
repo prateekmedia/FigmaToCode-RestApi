@@ -1,5 +1,4 @@
 import { AltNode, ExportableNode } from "types";
-import { btoa } from "js-base64";
 import { addWarning } from "./commonConversionWarnings";
 import { exportAsyncProxy } from "./exportAsyncProxy";
 
@@ -49,10 +48,12 @@ const createCanvasImageUrl = (width: number, height: number): string => {
 };
 
 export const getPlaceholderImage = (w: number, h = -1) => {
-  const _w = w.toFixed(0);
-  const _h = (h < 0 ? w : h).toFixed(0);
+  const safeW = w || 100; // Default to 100 if w is undefined/null
+  const safeH = h < 0 ? safeW : (h || 100); // Default to 100 if h is undefined/null
+  const _w = safeW.toFixed(0);
+  const _h = safeH.toFixed(0);
 
-  return `${PLACEHOLDER_IMAGE_DOMAIN}/${_w}x${_h}`;
+  return `${PLACEHOLDER_IMAGE_DOMAIN}/${_w}x${_h}/808080/png`;
 };
 
 const fillIsImage = ({ type }: Paint) => type === "IMAGE";
@@ -78,7 +79,7 @@ const imageBytesToBase64 = (bytes: Uint8Array): string => {
   }, "");
 
   // Encode binary string to base64
-  const b64 = btoa(binaryString);
+  const b64 = typeof btoa !== 'undefined' ? btoa(binaryString) : Buffer.from(binaryString, 'binary').toString('base64');
 
   return `data:image/png;base64,${b64}`;
 };

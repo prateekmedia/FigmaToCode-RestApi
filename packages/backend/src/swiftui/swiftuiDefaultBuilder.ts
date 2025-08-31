@@ -47,7 +47,7 @@ export class SwiftuiDefaultBuilder {
   blend(node: SceneNode & LayoutMixin & MinimalBlendMixin): this {
     this.pushModifier(
       swiftuiVisibility(node),
-      swiftuiRotation(node),
+      swiftuiRotation(node as any),
       swiftuiOpacity(node),
       swiftuiBlendMode(node),
     );

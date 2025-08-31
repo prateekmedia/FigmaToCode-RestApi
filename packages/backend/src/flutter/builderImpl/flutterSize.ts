@@ -19,13 +19,29 @@ export const flutterSize = (
   const size = nodeSize(node);
   let isExpanded: boolean = false;
 
+  // Check if node has rotation and will get Matrix4 transform
+  // If so, we need to "undo" Figma's dimension adjustment to get original pre-rotation dimensions
+  const rotation = (node as any).rotation || 0;
+  const hasRotation = Math.abs(rotation) > 0.01;
+  const is90DegreeRotation = Math.abs(rotation - Math.PI / 2) < 0.1 || Math.abs(rotation - 3 * Math.PI / 2) < 0.1;
+  
+  
+  let finalWidth = size.width;
+  let finalHeight = size.height;
+  
+  // For 90/270 degree rotations, Figma swaps dimensions but Flutter transform needs original dimensions
+  if (hasRotation && is90DegreeRotation && typeof size.width === "number" && typeof size.height === "number") {
+    finalWidth = size.height;  // Swap back to original
+    finalHeight = size.width;  // Swap back to original
+  }
+
   const nodeParent = node.parent;
 
   // this cast will always be true, since nodeWidthHeight was called with false to relative.
   let propWidth = "";
-  if (typeof size.width === "number") {
-    propWidth = numberToFixedString(size.width);
-  } else if (size.width === "fill") {
+  if (typeof finalWidth === "number") {
+    propWidth = numberToFixedString(finalWidth);
+  } else if (finalWidth === "fill") {
     // When parent is a Row, child must be Expanded.
     if (
       nodeParent &&
@@ -39,9 +55,9 @@ export const flutterSize = (
   }
 
   let propHeight = "";
-  if (typeof size.height === "number") {
-    propHeight = numberToFixedString(size.height);
-  } else if (size.height === "fill") {
+  if (typeof finalHeight === "number") {
+    propHeight = numberToFixedString(finalHeight);
+  } else if (finalHeight === "fill") {
     // When parent is a Column, child must be Expanded.
     if (
       nodeParent &&

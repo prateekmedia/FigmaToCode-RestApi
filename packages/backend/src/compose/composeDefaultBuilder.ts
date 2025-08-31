@@ -19,7 +19,7 @@ export class ComposeDefaultBuilder {
   }
 
   createContainer(node: SceneNode): this {
-    this.child = composeContainer(node, this.child);
+    this.child = composeContainer(node as any, this.child);
     this.rotationApplied = true;
 
     return this;
@@ -27,13 +27,13 @@ export class ComposeDefaultBuilder {
 
   blendAttr(node: SceneNode): this {
     if ("rotation" in node && !this.rotationApplied) {
-      this.child = composeRotation(node, this.child);
+      this.child = composeRotation(node as any, this.child);
     }
 
     if ("visible" in node) {
-      this.child = composeVisibility(node, this.child);
+      this.child = composeVisibility(node as any, this.child);
     } else if ("opacity" in node) {
-      this.child = composeOpacity(node, this.child);
+      this.child = composeOpacity(node as any, this.child);
     }
     return this;
   }

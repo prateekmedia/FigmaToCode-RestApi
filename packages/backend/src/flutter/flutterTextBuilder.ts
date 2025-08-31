@@ -15,6 +15,17 @@ import {
 } from "../common/commonTextHeightSpacing";
 import { StyledTextSegmentSubset } from "types/src/types";
 
+// Map Figma font weights to Flutter FontWeight - based on actual font weight values
+const getFontWeight = (weight: number): string => {
+  // Map common Figma weights to Flutter weights
+  if (weight >= 700) return 'FontWeight.w700';
+  if (weight >= 600) return 'FontWeight.w600';
+  if (weight >= 500) return 'FontWeight.w500';
+  if (weight >= 400) return 'FontWeight.w400';
+  if (weight >= 300) return 'FontWeight.w300';
+  return 'FontWeight.w400';
+};
+
 export class FlutterTextBuilder extends FlutterDefaultBuilder {
   node?: TextNode;
 
@@ -28,6 +39,7 @@ export class FlutterTextBuilder extends FlutterDefaultBuilder {
 
   createText(node: TextNode): this {
     this.node = node;
+    
     let alignHorizontal =
       node.textAlignHorizontal?.toString()?.toLowerCase() ?? "left";
     alignHorizontal =
@@ -71,21 +83,35 @@ export class FlutterTextBuilder extends FlutterDefaultBuilder {
   }[] {
     const segments = (node as any)
       .styledTextSegments as StyledTextSegmentSubset[];
-    if (!segments) {
+    
+    if (!segments || segments.length === 0) {
+      // Fallback: if no styled segments, use the node's characters property directly
+      if ('characters' in node && node.characters) {
+        return [{
+          style: this.getDefaultTextStyle(node),
+          text: node.characters,
+          openTypeFeatures: {}
+        }];
+      }
       return [];
     }
 
     return segments.map((segment) => {
-      const color = flutterColorFromDirectFills(segment.fills);
+      const color = flutterColorFromDirectFills(segment.fills as any);
 
-      const fontSize = `${numberToFixedString(segment.fontSize)}`;
+      // Use the original font size from Figma
+      const adjustedFontSize = segment.fontSize;
+      const segmentText = segment.characters;
+      
+      const fontSize = `${numberToFixedString(adjustedFontSize)}`;
       const fontStyle = this.fontStyle(segment.fontName);
       const fontFamily = `'${segment.fontName.family}'`;
-      const fontWeight = `FontWeight.w${segment.fontWeight}`;
-      const lineHeight = this.lineHeight(segment.lineHeight, segment.fontSize);
+      const fontWeight = getFontWeight(segment.fontWeight);
+      
+      const lineHeight = this.lineHeight(segment.lineHeight, adjustedFontSize);
       const letterSpacing = this.letterSpacing(
         segment.letterSpacing,
-        segment.fontSize,
+        adjustedFontSize,
       );
 
       const styleProperties: { [key: string]: string } = {
@@ -150,7 +176,7 @@ export class FlutterTextBuilder extends FlutterDefaultBuilder {
   lineHeight(lineHeight: LineHeight, fontSize: number): string {
     switch (lineHeight.unit) {
       case "AUTO":
-        return "";
+        return ""; // Omit line height for auto (Flutter default)
       case "PIXELS":
         return numberToFixedString(lineHeight.value / fontSize);
       case "PERCENT":
@@ -258,6 +284,31 @@ export class FlutterTextBuilder extends FlutterDefaultBuilder {
     }
     return "";
   }
+
+  getDefaultTextStyle(node: TextNode): string {
+    const color = flutterColorFromFills(node as any, 'fills');
+    
+    // Get font properties from node.style object (where Figma API actually stores them)
+    const style = (node as any).style;
+    const fontSize = style?.fontSize ? `${numberToFixedString(style.fontSize)}` : '';
+    const fontFamily = style?.fontFamily ? `'${style.fontFamily}'` : '';
+    const fontWeight = style?.fontWeight ? getFontWeight(style.fontWeight) : '';
+    
+    // Only include line height if it's not auto (has explicit pixel value)
+    const lineHeight = style?.lineHeightUnit === 'PIXELS' && style?.lineHeightPx && style?.fontSize ? 
+      numberToFixedString(style.lineHeightPx / style.fontSize) : '';
+    
+    const styleProperties: { [key: string]: string } = {};
+    
+    // Only add properties if they have values (no hardcoded defaults)
+    if (color) styleProperties.color = color;
+    if (fontSize) styleProperties.fontSize = fontSize;
+    if (fontFamily) styleProperties.fontFamily = fontFamily;
+    if (fontWeight) styleProperties.fontWeight = fontWeight;
+    if (lineHeight) styleProperties.height = lineHeight;
+
+    return generateWidgetCode("TextStyle", styleProperties);
+  }
 }
 
 export const wrapTextWithLayerBlur = (
@@ -269,11 +320,11 @@ export const wrapTextWithLayerBlur = (
       (effect) =>
         effect.type === "LAYER_BLUR" &&
         effect.visible !== false &&
-        effect.radius > 0,
+        'radius' in effect && (effect as any).radius > 0,
     );
-    if (blurEffect) {
+    if (blurEffect && 'radius' in blurEffect) {
       return generateWidgetCode("ImageFiltered", {
-        imageFilter: `ImageFilter.blur(sigmaX: ${blurEffect.radius}, sigmaY: ${blurEffect.radius})`,
+        imageFilter: `ImageFilter.blur(sigmaX: ${(blurEffect as any).radius}, sigmaY: ${(blurEffect as any).radius})`,
         child: child,
       });
     }

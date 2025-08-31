@@ -243,10 +243,10 @@ export class SwiftuiTextBuilder extends SwiftuiDefaultBuilder {
         (effect) =>
           effect.type === "LAYER_BLUR" &&
           effect.visible !== false &&
-          effect.radius > 0,
+          'radius' in effect && (effect as any).radius > 0,
       );
-      if (blurEffect) {
-        return `.blur(radius: ${blurEffect.radius})`;
+      if (blurEffect && 'radius' in blurEffect) {
+        return `.blur(radius: ${(blurEffect as any).radius})`;
       }
     }
     return "";

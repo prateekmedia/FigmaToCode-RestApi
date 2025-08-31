@@ -141,7 +141,7 @@ export class HtmlDefaultBuilder {
     const { node, isJSX } = this;
     this.addStyles(
       htmlVisibility(node, isJSX),
-      ...htmlRotation(node as LayoutMixin, isJSX),
+      ...htmlRotation(node as any, isJSX),
       htmlOpacity(node as MinimalBlendMixin, isJSX),
       htmlBlendMode(node as MinimalBlendMixin, isJSX),
     );
@@ -390,7 +390,7 @@ export class HtmlDefaultBuilder {
           formatWithJSX(
             "filter",
             this.isJSX,
-            `blur(${numberToFixedString(blur.radius / 2)}px)`,
+            `blur(${numberToFixedString((blur as any).radius / 2)}px)`,
           ),
         );
       }
@@ -403,7 +403,7 @@ export class HtmlDefaultBuilder {
           formatWithJSX(
             "backdrop-filter",
             this.isJSX,
-            `blur(${numberToFixedString(backgroundBlur.radius / 2)}px)`,
+            `blur(${numberToFixedString((backgroundBlur as any).radius / 2)}px)`,
           ),
         );
       }

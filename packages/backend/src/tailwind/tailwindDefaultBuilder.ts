@@ -93,7 +93,7 @@ export class TailwindDefaultBuilder {
   }
 
   commonShapeStyles(): this {
-    this.customColor((this.node as MinimalFillsTrait).fills, "bg");
+    this.customColor((this.node as any as MinimalFillsTrait).fills, "bg");
     this.radius();
     this.shadow();
     this.border();
@@ -115,7 +115,7 @@ export class TailwindDefaultBuilder {
       const { isOutline, property } = tailwindBorderWidth(this.node);
       this.addAttributes(property);
       this.customColor(
-        this.node.strokes as MinimalStrokesTrait,
+        (this.node as any).strokes,
         isOutline ? "outline" : "border",
       );
     }
@@ -226,8 +226,8 @@ export class TailwindDefaultBuilder {
       const blur = node.effects.find(
         (e) => e.type === "LAYER_BLUR" && e.visible,
       );
-      if (blur) {
-        const blurValue = pxToBlur(blur.radius / 2);
+      if (blur && 'radius' in blur) {
+        const blurValue = pxToBlur((blur as any).radius / 2);
         if (blurValue) {
           this.addAttributes(
             blurValue === "blur" ? "blur" : `blur-${blurValue}`,
@@ -238,8 +238,8 @@ export class TailwindDefaultBuilder {
       const backgroundBlur = node.effects.find(
         (e) => e.type === "BACKGROUND_BLUR" && e.visible,
       );
-      if (backgroundBlur) {
-        const backgroundBlurValue = pxToBlur(backgroundBlur.radius / 2);
+      if (backgroundBlur && 'radius' in backgroundBlur) {
+        const backgroundBlurValue = pxToBlur((backgroundBlur as any).radius / 2);
         if (backgroundBlurValue) {
           this.addAttributes(
             `backdrop-blur${

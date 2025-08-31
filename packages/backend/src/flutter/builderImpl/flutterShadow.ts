@@ -9,7 +9,7 @@ import { indentStringFlutter } from "../../common/indentString";
 export const flutterShadow = (node: SceneNode): string => {
   let propBoxShadow = "";
   if ("effects" in node && node.effects?.length > 0) {
-    const visibleEffects: Array<Effect> = node.effects.filter((d) => d.visible);
+    const visibleEffects: Array<Effect> = node.effects.filter((d) => 'visible' in d && d.visible);
 
     if (visibleEffects.length > 0) {
       let boxShadow = "";
@@ -29,7 +29,7 @@ export const flutterShadow = (node: SceneNode): string => {
             spreadRadius: effect.spread
               ? numberToFixedString(effect.spread)
               : "0",
-          });
+          }) + ",";
         }
       });
 

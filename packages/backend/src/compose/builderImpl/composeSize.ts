@@ -10,13 +10,13 @@ export const composeSize = (node: SceneNode): string | null => {
     // Check for special sizing modes
     if ("layoutSizingHorizontal" in node && node.layoutSizingHorizontal === "FILL") {
       modifiers.push("fillMaxWidth()");
-    } else if (width > 0) {
+    } else if (typeof width === 'number' && width > 0) {
       modifiers.push(`width(${width}.dp)`);
     }
 
     if ("layoutSizingVertical" in node && node.layoutSizingVertical === "FILL") {
       modifiers.push("fillMaxHeight()");
-    } else if (height > 0) {
+    } else if (typeof height === 'number' && height > 0) {
       modifiers.push(`height(${height}.dp)`);
     }
 

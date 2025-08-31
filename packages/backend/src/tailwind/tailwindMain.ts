@@ -221,7 +221,7 @@ export const tailwindContainer = (
   // Determine if we should use img tag
   let tag = "div";
   let src = "";
-  const topFill = retrieveTopFill(node.fills);
+  const topFill = retrieveTopFill(node.fills as any);
 
   if (topFill?.type === "IMAGE") {
     addWarning("Image fills are replaced with placeholders");
@@ -267,7 +267,7 @@ export const tailwindSection = async (
   const builder = new TailwindDefaultBuilder(node, settings)
     .size()
     .position()
-    .customColor(node.fills, "bg");
+    .customColor(node.fills as any, "bg");
 
   const build = builder.build();
   return childrenStr

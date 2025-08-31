@@ -1,0 +1,29 @@
+{
+  "name": "figma-to-code-api",
+  "version": "1.0.0",
+  "description": "API server for converting Figma designs to code",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "lint": "eslint \"src/**/*.ts\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "axios": "^1.7.9",
+    "backend": "workspace:*",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "types": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.18.0",
+    "eslint": "^9.29.0",
+    "eslint-config-custom": "workspace:*",
+    "tsx": "^4.20.5",
+    "typescript": "^5.8.3"
+  }
+}

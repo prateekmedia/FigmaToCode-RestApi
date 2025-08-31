@@ -83,14 +83,14 @@ export class ComposeTextBuilder extends ComposeDefaultBuilder {
     }
 
     // Text color
-    const fill = retrieveTopFill(node.fills);
+    const fill = retrieveTopFill(node.fills as any);
     if (fill?.type === "SOLID") {
       const color = rgbTo6hex(fill.color);
       styles.push(`color = Color(0xFF${color.toUpperCase()})`);
     }
 
     // Letter spacing
-    if (node.letterSpacing !== figma.mixed && node.letterSpacing !== 0) {
+    if (node.letterSpacing !== figma.mixed && typeof node.letterSpacing === 'number' && node.letterSpacing !== 0) {
       const spacing = commonLetterSpacing(node.letterSpacing, node.fontSize as number);
       styles.push(`letterSpacing = ${spacing}.sp`);
     }

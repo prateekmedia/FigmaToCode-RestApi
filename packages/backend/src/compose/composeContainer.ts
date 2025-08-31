@@ -22,10 +22,10 @@ export const composeContainer = (
 
   // Determine if we need a specific container type
   if ("fills" in node) {
-    const topFill = retrieveTopFill(node.fills);
+    const topFill = retrieveTopFill(node.fills as any);
     if (topFill) {
       // Background color or gradient
-      const backgroundModifier = composeColor(topFill);
+      const backgroundModifier = composeColor(topFill as any);
       if (backgroundModifier) {
         modifiers.push(backgroundModifier);
       }

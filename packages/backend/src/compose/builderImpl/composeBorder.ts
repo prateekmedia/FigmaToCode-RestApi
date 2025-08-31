@@ -49,7 +49,7 @@ export const composeBorder = (node: SceneNode, shape?: string | null): string =>
     return "";
   }
 
-  const strokeFill = retrieveTopFill(node.strokes);
+  const strokeFill = retrieveTopFill(node.strokes as any);
   if (!strokeFill) {
     return "";
   }
@@ -62,7 +62,7 @@ export const composeBorder = (node: SceneNode, shape?: string | null): string =>
       return "";
     }
 
-    return generateBorderModifier(stroke.all, strokeFill, strokeAlignment, shape);
+    return generateBorderModifier(stroke.all, strokeFill as any, strokeAlignment, shape);
   } else {
     // Handle non-uniform borders
     // Compose doesn't have direct support for different border widths per side
@@ -80,7 +80,7 @@ export const composeBorder = (node: SceneNode, shape?: string | null): string =>
 
     // For now, use uniform border with max width
     // TODO: Consider using Canvas or custom drawing for true non-uniform borders
-    return generateBorderModifier(maxWidth, strokeFill, strokeAlignment, shape);
+    return generateBorderModifier(maxWidth, strokeFill as any, strokeAlignment, shape);
   }
 };
 

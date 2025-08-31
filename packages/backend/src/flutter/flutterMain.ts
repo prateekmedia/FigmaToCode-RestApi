@@ -16,6 +16,7 @@ import {
 import { PluginSettings } from "types";
 import { addWarning } from "../common/commonConversionWarnings";
 import { getVisibleNodes } from "../common/nodeVisibility";
+import { retrieveTopFill } from "../common/retrieveFill";
 
 let localSettings: PluginSettings;
 let previousExecutionCache: string[];
@@ -89,6 +90,7 @@ export const flutterMain = (
 
 const flutterWidgetGenerator = (
   sceneNode: ReadonlyArray<SceneNode>,
+  stackParentContext?: { absoluteBoundingBox: any, name: string }
 ): string => {
   let comp: string[] = [];
 
@@ -102,22 +104,22 @@ const flutterWidgetGenerator = (
       case "STAR":
       case "POLYGON":
       case "LINE":
-        comp.push(flutterContainer(node, ""));
+        comp.push(flutterContainer(node, "", stackParentContext));
         break;
       case "GROUP":
-        comp.push(flutterGroup(node));
+        comp.push(flutterGroup(node, stackParentContext));
         break;
       case "FRAME":
       case "INSTANCE":
       case "COMPONENT":
       case "COMPONENT_SET":
-        comp.push(flutterFrame(node));
+        comp.push(flutterFrame(node, stackParentContext));
         break;
       case "SECTION":
-        comp.push(flutterContainer(node, ""));
+        comp.push(flutterContainer(node, "", stackParentContext));
         break;
       case "TEXT":
-        comp.push(flutterText(node));
+        comp.push(flutterText(node, stackParentContext));
         break;
       case "VECTOR":
         addWarning("VectorNodes are not supported in Flutter");
@@ -131,20 +133,21 @@ const flutterWidgetGenerator = (
   return comp.join(",\n");
 };
 
-const flutterGroup = (node: GroupNode): string => {
-  const widget = flutterWidgetGenerator(node.children);
+const flutterGroup = (node: GroupNode, stackParentContext?: { absoluteBoundingBox: any, name: string }): string => {
+  const widget = flutterWidgetGenerator(node.children, stackParentContext);
   return flutterContainer(
     node,
     generateWidgetCode("Stack", {
       children: widget ? [widget] : [],
     }),
+    stackParentContext
   );
 };
 
-const flutterContainer = (node: SceneNode, child: string): string => {
+const flutterContainer = (node: SceneNode, child: string, stackParentContext?: { absoluteBoundingBox: any, name: string }): string => {
   let propChild = "";
 
-  if ("fills" in node && retrieveTopFill(node.fills)?.type === "IMAGE") {
+  if ("fills" in node && retrieveTopFill(node.fills as any)?.type === "IMAGE") {
     addWarning("Image fills are replaced with placeholders");
   }
 
@@ -154,26 +157,45 @@ const flutterContainer = (node: SceneNode, child: string): string => {
 
   const builder = new FlutterDefaultBuilder(propChild)
     .createContainer(node)
-    .blendAttr(node)
-    .position(node);
+    .blendAttr(node);
+    
+  // Pass Stack context to positioning logic
+  if (stackParentContext) {
+    builder.positionInStack(node, stackParentContext);
+  } else {
+    builder.position(node);
+  }
 
   return builder.child;
 };
 
-const flutterText = (node: TextNode): string => {
+const flutterText = (node: TextNode, stackParentContext?: { absoluteBoundingBox: any, name: string }): string => {
   const builder = new FlutterTextBuilder().createText(node);
   previousExecutionCache.push(builder.child);
 
-  return builder.blendAttr(node).textAutoSize(node).position(node).child;
+  const textBuilder = builder.blendAttr(node).textAutoSize(node);
+  
+  // Pass Stack context to positioning logic
+  if (stackParentContext) {
+    textBuilder.positionInStack(node, stackParentContext);
+  } else {
+    textBuilder.position(node);
+  }
+  
+  return textBuilder.child;
 };
 
 const flutterFrame = (
   node: SceneNode & BaseFrameMixin & MinimalBlendMixin,
+  stackParentContext?: { absoluteBoundingBox: any, name: string }
 ): string => {
   // Check if any direct children need absolute positioning
   const hasAbsoluteChildren = node.children.some(
     (child: any) => (child as any).layoutPositioning === "ABSOLUTE",
   );
+
+  // Check if this is a root frame with explicit dimensions
+  const isRootFrame = !(node as any).parent;
 
   // Add warning if we need to use Stack due to absolute positioning
   if (hasAbsoluteChildren && node.layoutMode !== "NONE") {
@@ -185,10 +207,37 @@ const flutterFrame = (
   }
 
   // Generate widget code for children
-  const children = flutterWidgetGenerator(node.children);
+  // Only pass Stack context when this frame will actually generate a Stack widget
+  let childContext = stackParentContext;
+  
+  // Determine if THIS frame will generate a Stack (not just inherit context)
+  const thisFrameGeneratesStack = (hasAbsoluteChildren || isRootFrame || node.layoutMode === "NONE") ||
+    (!node.layoutMode && !node.inferredAutoLayout);
+  
+  if (thisFrameGeneratesStack) {
+    childContext = { 
+      absoluteBoundingBox: (node as any).absoluteBoundingBox,
+      name: node.name 
+    };
+    console.log(`Frame "${node.name}" will generate Stack - passing context to children`);
+  }
+  
+  const children = flutterWidgetGenerator(node.children, childContext);
 
-  // Force Stack for any frame that has absolute positioned children
-  if (hasAbsoluteChildren) {
+  // Debug only specific frames that should use Stack
+  if (node.name.includes("Frame 1412769182") || node.name.includes("header") || (node.children && node.children.some((child: any) => child.name === "Label"))) {
+    console.log(`LAYOUT MODE DEBUG for "${node.name}":`, {
+      layoutMode: node.layoutMode,
+      inferredAutoLayout: !!node.inferredAutoLayout,
+      hasAbsoluteChildren,
+      isRootFrame,
+      childNames: node.children?.map((child: any) => child.name)
+    });
+  }
+
+  // Check if layoutMode is AUTO - prefer Stack for absolute positioning
+  if (node.layoutMode === "AUTO") {
+    console.log(`Using Stack for AUTO layoutMode: "${node.name}"`);
     return flutterContainer(
       node,
       generateWidgetCode("Stack", {
@@ -197,27 +246,46 @@ const flutterFrame = (
     );
   }
 
-  if (node.layoutMode !== "NONE") {
-    const rowColumnWrap = makeRowColumnWrap(node, children);
-    return flutterContainer(node, rowColumnWrap);
-  } else {
-    if (node.inferredAutoLayout) {
-      const rowColumnWrap = makeRowColumnWrap(node.inferredAutoLayout, children);
-      return flutterContainer(node, rowColumnWrap);
-    }
+  // Prioritize Column/Row layouts when auto-layout is detected
+  if (node.layoutMode && (node.layoutMode as any) !== "NONE") {
+    // For Row/Column layouts, generate children WITHOUT Stack context (no positioning)
+    const rowColumnChildren = flutterWidgetGenerator(node.children);
+    const rowColumnWrap = makeRowColumnWrap(node, rowColumnChildren);
+    // Check if this frame needs Container wrapper for styling
+    const needsContainerStyling = hasVisualStyling(node);
+    return needsContainerStyling ? flutterContainer(node, rowColumnWrap, stackParentContext) : rowColumnWrap;
+  } else if (node.inferredAutoLayout) {
+    // For Row/Column layouts, generate children WITHOUT Stack context (no positioning)
+    const rowColumnChildren = flutterWidgetGenerator(node.children);
+    const rowColumnWrap = makeRowColumnWrap(node.inferredAutoLayout, rowColumnChildren);
+    // Check if this frame needs Container wrapper for styling
+    const needsContainerStyling = hasVisualStyling(node);
+    return needsContainerStyling ? flutterContainer(node, rowColumnWrap, stackParentContext) : rowColumnWrap;
+  }
 
-    if (node.isAsset) {
-      return flutterContainer(node, generateWidgetCode("FlutterLogo", {}));
-    }
-
-    // Default to Stack for frames without any layout
+  // Use Stack only when necessary (absolute positioned children, root frames, or no layout)
+  if (hasAbsoluteChildren || isRootFrame || node.layoutMode === "NONE") {
     return flutterContainer(
       node,
       generateWidgetCode("Stack", {
         children: children !== "" ? [children] : [],
       }),
+      stackParentContext
     );
   }
+
+  if (node.isAsset) {
+    return flutterContainer(node, generateWidgetCode("FlutterLogo", {}), stackParentContext);
+  }
+
+  // Default to Stack for frames without any layout info
+  return flutterContainer(
+    node,
+    generateWidgetCode("Stack", {
+      children: children !== "" ? [children] : [],
+    }),
+    stackParentContext
+  );
 };
 
 const makeRowColumnWrap = (
@@ -257,6 +325,53 @@ const makeRowColumnWrap = (
   widgetProps.children = [children];
 
   return generateWidgetCode(rowOrColumn, widgetProps);
+};
+
+const hasVisualStyling = (node: SceneNode): boolean => {
+  // Check if node has visual properties that require Container wrapper
+  
+  // Has background fills or decorations
+  if ("fills" in node && node.fills && Array.isArray(node.fills) && node.fills.length > 0) {
+    const topFill = retrieveTopFill(node.fills as any);
+    if (topFill && topFill.visible !== false) {
+      return true;
+    }
+  }
+  
+  // Has border/stroke
+  if ("strokeWeight" in node && node.strokeWeight && node.strokeWeight > 0) {
+    return true;
+  }
+  
+  // Has padding
+  if ("paddingLeft" in node && (node.paddingLeft || node.paddingRight || node.paddingTop || node.paddingBottom)) {
+    return true;
+  }
+  
+  // Has corner radius
+  if ("cornerRadius" in node && node.cornerRadius && node.cornerRadius > 0) {
+    return true;
+  }
+  
+  // Has clipping
+  if ("clipsContent" in node && node.clipsContent === true) {
+    return true;
+  }
+  
+  // Has rotation
+  if ("rotation" in node && node.rotation && Math.abs(node.rotation) > 0.01) {
+    return true;
+  }
+  
+  // Has shadow effects
+  if ("effects" in node && node.effects && Array.isArray(node.effects) && node.effects.length > 0) {
+    const hasVisibleEffects = node.effects.some(effect => effect.visible !== false);
+    if (hasVisibleEffects) {
+      return true;
+    }
+  }
+  
+  return false;
 };
 
 export const flutterCodeGenTextStyles = () => {

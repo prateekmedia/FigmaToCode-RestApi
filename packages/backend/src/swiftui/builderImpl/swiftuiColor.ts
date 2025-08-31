@@ -50,7 +50,7 @@ export const swiftuiSolidColor = (
 export const swiftuiSolidColorFromDirectFills = (
   fills: ReadonlyArray<Paint> | PluginAPI["mixed"],
 ): string => {
-  const fill = retrieveTopFill(fills);
+  const fill = retrieveTopFill(fills as any);
 
   if (fill && fill.type === "SOLID") {
     // opacity should only be null on set, not on get. But better be prevented.
@@ -82,7 +82,7 @@ export const swiftuiGradient = (fill: GradientPaint): string => {
     return ""; // Only handling linear gradients here for simplicity
   }
 
-  const angle = gradientAngle(fill);
+  const angle = gradientAngle(fill as any);
   const direction = gradientDirection(angle);
 
   const colors = fill.gradientStops

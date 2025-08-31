@@ -54,7 +54,6 @@ function nearestColor(needle: RGB | string, colors: Array<ColorSpec>): string {
     }
   }
 
-  // @ts-expect-error this is always not null
   return value.source;
 }
 
