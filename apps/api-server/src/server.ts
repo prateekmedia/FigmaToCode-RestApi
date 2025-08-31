@@ -1,9 +1,12 @@
 // MUST be first import to set up figma global
 import './setup/mockFigma';
 
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import { convertRoute } from './routes/convert';
+import { exportImagesRoute } from './routes/exportImages';
+import { screenshotRoute } from './routes/screenshot';
 import { healthRoute } from './routes/health';
 import { errorHandler } from './middleware/errorHandler';
 import { Logger } from './services/logger';
@@ -21,6 +24,8 @@ app.use(express.urlencoded({ extended: true }));
 // Routes
 app.use('/api/health', healthRoute);
 app.use('/api/convert', convertRoute);
+app.use('/api/export-images', exportImagesRoute);
+app.use('/api/screenshot', screenshotRoute);
 
 // Error handling middleware
 app.use(errorHandler);
