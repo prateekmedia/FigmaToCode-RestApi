@@ -61,6 +61,27 @@ const getStatelessTemplate = (name: string, injectCode: string): string =>
   }
 }`;
 
+/**
+ * Checks if a widget is truly empty (contains no meaningful content)
+ */
+const isEmptyWidget = (widget: string): boolean => {
+  if (!widget || widget.trim() === "") {
+    return true;
+  }
+  
+  // Check for empty Stack, Column, Row patterns
+  const emptyPatterns = [
+    /Stack\(\s*\)/,
+    /Stack\(\s*children:\s*\[\s*\],?\s*\)/,
+    /Column\(\s*\)/,
+    /Column\(\s*children:\s*\[\s*\],?\s*\)/,
+    /Row\(\s*\)/,
+    /Row\(\s*children:\s*\[\s*\],?\s*\)/,
+  ];
+  
+  return emptyPatterns.some(pattern => pattern.test(widget));
+};
+
 export const flutterMain = (
   sceneNode: ReadonlyArray<SceneNode>,
   settings: PluginSettings,
@@ -140,14 +161,14 @@ const flutterWidgetGenerator = (
         break;
     }
     
-    // Only add widget to comp if it's not empty
-    if (widgetResult && widgetResult.trim() !== "") {
+    // Only add widget to comp if it's not empty (including empty Stack/Container patterns)
+    if (widgetResult && widgetResult.trim() !== "" && !isEmptyWidget(widgetResult)) {
       comp.push(widgetResult);
     }
   });
 
-  // Filter out empty widgets before joining
-  const meaningfulWidgets = comp.filter(widget => widget && widget.trim() !== "");
+  // Filter out empty widgets before joining (including empty Stack/Container patterns)
+  const meaningfulWidgets = comp.filter(widget => widget && widget.trim() !== "" && !isEmptyWidget(widget));
   return meaningfulWidgets.join(",\n");
 };
 
@@ -162,6 +183,11 @@ const flutterGroup = (node: GroupNode, stackParentContext?: { absoluteBoundingBo
   const stackWidget = generateWidgetCode("Stack", {
     children: [widget],
   });
+  
+  // Check if the generated Stack would be empty (recursive empty propagation)
+  if (isEmptyWidget(stackWidget)) {
+    return hasVisualStyling(node) ? flutterContainer(node, "", stackParentContext) : "";
+  }
   
   // Only wrap in Container if styling is needed
   const needsContainerStyling = hasVisualStyling(node);
@@ -250,12 +276,16 @@ const flutterFrame = (
 
   // Use Stack for absolute positioned children or when no layout mode
   if (hasAbsoluteChildren || isRootFrame || node.layoutMode === "NONE") {
-    return flutterContainer(
-      node,
-      generateWidgetCode("Stack", {
-        children: children !== "" ? [children] : [],
-      }),
-    );
+    const stackWidget = generateWidgetCode("Stack", {
+      children: children !== "" ? [children] : [],
+    });
+    
+    // Check if the generated Stack would be empty (recursive empty propagation)
+    if (isEmptyWidget(stackWidget)) {
+      return hasVisualStyling(node) ? flutterContainer(node, "", stackParentContext) : "";
+    }
+    
+    return flutterContainer(node, stackWidget, stackParentContext);
   }
 
   // Prioritize Column/Row layouts when auto-layout is detected
@@ -287,8 +317,8 @@ const flutterFrame = (
       children: [children],
     });
     
-    // Check if Stack would be empty (children array becomes empty after filtering)
-    if (stackWidget.includes("children: [],") || stackWidget === "Stack()") {
+    // Check if the generated Stack would be empty (recursive empty propagation)
+    if (isEmptyWidget(stackWidget)) {
       return hasVisualStyling(node) ? flutterContainer(node, "", stackParentContext) : "";
     }
     
@@ -310,8 +340,8 @@ const flutterFrame = (
     children: [children],
   });
   
-  // Check if Stack would be empty
-  if (defaultStackWidget.includes("children: [],") || defaultStackWidget === "Stack()") {
+  // Check if the generated Stack would be empty (recursive empty propagation)
+  if (isEmptyWidget(defaultStackWidget)) {
     return hasVisualStyling(node) ? flutterContainer(node, "", stackParentContext) : "";
   }
   
