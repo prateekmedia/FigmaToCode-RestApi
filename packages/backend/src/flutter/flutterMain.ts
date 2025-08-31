@@ -239,19 +239,6 @@ const flutterFrame = (
   node: SceneNode & BaseFrameMixin & MinimalBlendMixin,
   stackParentContext?: { absoluteBoundingBox: any, name: string }
 ): string => {
-  // Debug layout properties
-  console.log(`[LAYOUT DEBUG] Frame "${node.name}":`, {
-    layoutMode: (node as any).layoutMode,
-    inferredAutoLayout: (node as any).inferredAutoLayout,
-    primaryAxisSizingMode: (node as any).primaryAxisSizingMode,
-    counterAxisSizingMode: (node as any).counterAxisSizingMode,
-    itemSpacing: (node as any).itemSpacing,
-    paddingLeft: (node as any).paddingLeft,
-    paddingRight: (node as any).paddingRight,
-    paddingTop: (node as any).paddingTop,
-    paddingBottom: (node as any).paddingBottom
-  });
-
   // Check if any direct children need absolute positioning
   const hasAbsoluteChildren = node.children.some(
     (child: any) => (child as any).layoutPositioning === "ABSOLUTE",
@@ -289,16 +276,13 @@ const flutterFrame = (
 
   // PRIORITY 1: Auto-layout detected - use Column/Row (even if has absolute children or is root)
   if (node.layoutMode && (node.layoutMode as any) !== "NONE") {
-    console.log(`[LAYOUT DEBUG] Using auto-layout for ${node.name}: ${node.layoutMode}`);
     // For Row/Column layouts, generate children WITHOUT Stack context (no positioning)
     const rowColumnChildren = flutterWidgetGenerator(node.children);
     const rowColumnWrap = makeRowColumnWrap(node, rowColumnChildren);
-    console.log(`[LAYOUT DEBUG] Generated ${node.layoutMode === 'HORIZONTAL' ? 'Row' : 'Column'} for ${node.name}`);
     // Check if this frame needs Container wrapper for styling
     const needsContainerStyling = hasVisualStyling(node);
     return needsContainerStyling ? flutterContainer(node, rowColumnWrap, stackParentContext) : rowColumnWrap;
   } else if (node.inferredAutoLayout) {
-    console.log(`[LAYOUT DEBUG] Using inferred auto-layout for ${node.name}`);
     // For Row/Column layouts, generate children WITHOUT Stack context (no positioning)
     const rowColumnChildren = flutterWidgetGenerator(node.children);
     const rowColumnWrap = makeRowColumnWrap(node.inferredAutoLayout, rowColumnChildren);
@@ -308,12 +292,6 @@ const flutterFrame = (
   }
 
   // PRIORITY 2: Fall back to Stack only when no auto-layout is available
-  console.log(`[LAYOUT DEBUG] Using Stack for ${node.name} because no auto-layout detected:`, {
-    hasAbsoluteChildren,
-    isRootFrame, 
-    noLayoutMode: !node.layoutMode,
-    layoutModeNone: (node.layoutMode as any) === "NONE"
-  });
   
   // Don't create Stack if there are no meaningful children
   if (children === "" || children.trim() === "") {

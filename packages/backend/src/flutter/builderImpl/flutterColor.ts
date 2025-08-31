@@ -106,19 +106,9 @@ export const flutterDecorationImage = (node: SceneNode, fill: ImagePaint) => {
   }
   
   // Check for local image path from API server
-  console.log(`[IMAGE DEBUG] Processing image fill for node: width=${imageWidth}, height=${imageHeight}`);
-  console.log(`[IMAGE DEBUG] Fill object:`, {
-    type: fill.type,
-    hasLocalPath: !!(fill as any).localImagePath,
-    localPath: (fill as any).localImagePath,
-    visible: fill.visible
-  });
-  
   const imageSource = (fill as any).localImagePath 
     ? `AssetImage("${(fill as any).localImagePath}")`
     : `NetworkImage("${getPlaceholderImage(imageWidth, imageHeight)}")`;
-
-  console.log(`[IMAGE DEBUG] Final image source:`, imageSource);
 
   return generateWidgetCode("DecorationImage", {
     image: imageSource,
