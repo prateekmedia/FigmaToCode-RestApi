@@ -23,6 +23,10 @@ export interface ExportedImageInfo {
   };
 }
 
+export interface ImageNodeMapping {
+  [imageName: string]: string; // imageName -> nodeId
+}
+
 export interface ImageNode {
   id: string;
   name: string;
@@ -108,18 +112,19 @@ export class ImageExporter {
     fileKey: string,
     nodes: any[],
     options: Partial<ImageExportOptions> = {}
-  ): Promise<ExportedImageInfo> {
+  ): Promise<{ images: ExportedImageInfo; mapping: ImageNodeMapping }> {
     const exportOptions = { ...this.defaultOptions, ...options };
     const imageNodes = this.findImageNodes(nodes);
     
     if (imageNodes.length === 0) {
       Logger.info('No image nodes found for export');
-      return {};
+      return { images: {}, mapping: {} };
     }
 
     Logger.info(`Found ${imageNodes.length} image nodes to export`);
     
     const exportedImages: ExportedImageInfo = {};
+    const nodeMapping: ImageNodeMapping = {};
     
     // Create base directory
     await this.ensureDirectory(exportOptions.directory);
@@ -131,7 +136,8 @@ export class ImageExporter {
     const exportPromises = imageNodes.map(async (imageNode, i) => {
       Logger.debug(`Starting export for node ${i + 1}/${imageNodes.length}: ${imageNode.name}`);
       
-      const sanitizedName = this.sanitizeFilename(imageNode.name);
+      const sanitizedName = this.sanitizeFilename(imageNode.id, imageNode.name);
+      nodeMapping[sanitizedName] = imageNode.id;
       const nodeExports: { [scale: string]: { [format: string]: string } } = {};
 
       // Process scales concurrently
@@ -180,7 +186,7 @@ export class ImageExporter {
 
     Logger.info(`Successfully exported all ${imageNodes.length} image nodes`);
 
-    return exportedImages;
+    return { images: exportedImages, mapping: nodeMapping };
   }
 
   /**
@@ -246,12 +252,14 @@ export class ImageExporter {
   /**
    * Sanitizes filename for filesystem compatibility
    */
-  private sanitizeFilename(name: string): string {
-    return name
+  private sanitizeFilename(nodeId: string, name: string): string {
+    const sanitizedNodeId = nodeId.replace(/:/g, '-');
+    const sanitizedName = name
       .replace(/[^a-zA-Z0-9_-]/g, '_')
       .replace(/_{2,}/g, '_')
       .replace(/^_|_$/g, '')
       .toLowerCase() || 'unnamed';
+    return `${sanitizedNodeId}_${sanitizedName}`;
   }
 
   /**

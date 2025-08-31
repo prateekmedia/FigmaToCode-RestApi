@@ -122,11 +122,12 @@ convertRoute.post('/', asyncHandler(async (req, res) => {
   if (exportImages) {
     Logger.info('Exporting images...');
     const imageExporter = new ImageExporter(figmaClient);
-    exportedImages = await imageExporter.exportImages(
+    const exportResult = await imageExporter.exportImages(
       urlParts.fileKey,
       restApiNodes,
       exportImagesOptions
     );
+    exportedImages = exportResult.images;
     Logger.info('Image export completed');
   }
 
