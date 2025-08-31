@@ -124,13 +124,12 @@ export class ImageExporter {
     // Create base directory
     await this.ensureDirectory(exportOptions.directory);
 
-    // Process images with concurrent downloads for better performance
-    const limitedNodes = imageNodes.slice(0, 5); // Limit to 5 most important nodes
-    Logger.info(`Processing ${limitedNodes.length} of ${imageNodes.length} image nodes`);
+    // Process ALL image nodes with concurrent downloads for complete coverage
+    Logger.info(`Processing all ${imageNodes.length} image nodes`);
     
     // Process all nodes concurrently
-    const exportPromises = limitedNodes.map(async (imageNode, i) => {
-      Logger.debug(`Starting export for node ${i + 1}/${limitedNodes.length}: ${imageNode.name}`);
+    const exportPromises = imageNodes.map(async (imageNode, i) => {
+      Logger.debug(`Starting export for node ${i + 1}/${imageNodes.length}: ${imageNode.name}`);
       
       const sanitizedName = this.sanitizeFilename(imageNode.name);
       const nodeExports: { [scale: string]: { [format: string]: string } } = {};
@@ -179,9 +178,7 @@ export class ImageExporter {
       exportedImages[result.nodeId] = result.exports;
     }
 
-    if (imageNodes.length > 5) {
-      Logger.warn(`Limited image export to first 5 nodes (found ${imageNodes.length} total). Use more specific node selection for full export.`);
-    }
+    Logger.info(`Successfully exported all ${imageNodes.length} image nodes`);
 
     return exportedImages;
   }
