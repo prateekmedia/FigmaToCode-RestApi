@@ -100,13 +100,14 @@ export class FileManager {
     try {
       const resolved = path.resolve(directory);
       
-      // Check for common unsafe patterns
-      if (resolved.includes('..') || resolved.includes('~')) {
+      // Check for directory traversal attempts in the original path
+      // (not in the resolved path since that might contain '..' as part of actual directory names)
+      if (directory.includes('../') || directory.includes('..\\')) {
         return false;
       }
 
-      // Must be an absolute path after resolution
-      if (!path.isAbsolute(resolved)) {
+      // Check for home directory expansion attempts
+      if (directory.startsWith('~')) {
         return false;
       }
 

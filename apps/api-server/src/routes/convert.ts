@@ -38,8 +38,10 @@ const validateRequest = (body: any): ConvertRequest => {
     throw new AppError('URL is required and must be a string', 400);
   }
 
-  if (!body.token || typeof body.token !== 'string') {
-    throw new AppError('Figma token is required and must be a string', 400);
+  // Use token from request body if provided, otherwise use environment variable
+  const token = body.token || process.env.FIGMA_TOKEN;
+  if (!token || typeof token !== 'string') {
+    throw new AppError('Figma token is required (provide in request or set FIGMA_TOKEN env variable)', 400);
   }
 
   // Validate URL format
@@ -75,7 +77,7 @@ const validateRequest = (body: any): ConvertRequest => {
 
   return {
     url: body.url,
-    token: body.token,
+    token,
     settings,
     output,
     exportImages: body.exportImages,
